@@ -1,5 +1,5 @@
 import graphene
-from alfred.lights import dmx_set_values
+from alfred.lights import dmx_set_values, dmx_get_values
 
 
 class SetLightsType(graphene.InputObjectType):
@@ -24,20 +24,21 @@ class SetLights(graphene.Mutation):
 
     @staticmethod
     def mutate(root, args, context, info):
-        lights = args.get('lights')
-        dmx_set_values(lights['red'], lights['green'], lights['blue'], lights['luminosity'])
+        dmx_values = args.get('lights')
+        dmx_values = dmx_set_values(dmx_values['red'], dmx_values['green'], dmx_values['blue'], dmx_values['luminosity'])
+        lights_output = LightsType()
+        lights_output.red = dmx_values['red']
+        lights_output.green = dmx_values['green']
+        lights_output.blue = dmx_values['blue']
+        lights_output.luminosity = dmx_values['luminosity']
+        return SetLights(lights=lights_output)
 
 
 class Query(graphene.ObjectType):
     lights = graphene.Field(LightsType)
 
     def resolve_lights(self, args, context, info):
-        return {
-            "red": 0,
-            "green": 0,
-            "blue": 0,
-            "luminosity": 0,
-        }
+        return dmx_get_values()
 
 
 class Mutation(graphene.ObjectType):
