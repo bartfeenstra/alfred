@@ -25,7 +25,9 @@ class SetLights(graphene.Mutation):
     @staticmethod
     def mutate(root, args, context, info):
         dmx_values = args.get('lights')
-        dmx_values = dmx_set_values(dmx_values['red'], dmx_values['green'], dmx_values['blue'], dmx_values['luminosity'])
+        dmx_values = dmx_set_values(dmx_values['red'], dmx_values['green'],
+                                    dmx_values['blue'],
+                                    dmx_values['luminosity'])
         lights_output = LightsType()
         lights_output.red = dmx_values['red']
         lights_output.green = dmx_values['green']
