@@ -34,6 +34,8 @@ def dmx_set_values(red: int, green: int, blue: int, luminosity: int) -> dict:
     call(['ola_set_dmx', '-u', '1', '-d', ola_dmx_values])
     return _dmx_values
 
+
 # Reset the lights.
 # @todo Does this execute every single time the module is included?
-dmx_set_values(_dmx_values['red'], _dmx_values['green'], _dmx_values['blue'], _dmx_values['luminosity'])
+dmx_set_values(_dmx_values['red'], _dmx_values['green'], _dmx_values['blue'],
+               _dmx_values['luminosity'])
