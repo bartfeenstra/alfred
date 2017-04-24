@@ -3,9 +3,7 @@ from subprocess import call
 
 
 _dmx_values = {
-    'red': 0,
-    'green': 0,
-    'blue': 0,
+    'color': '#abcdef',
     'luminosity': 0,
 }
 
@@ -17,7 +15,7 @@ def dmx_get_values() -> dict:
 
 
 @contract
-def dmx_set_values(red: int, green: int, blue: int, luminosity: int) -> dict:
+def dmx_set_values(color: str, luminosity: int) -> dict:
     # This assumes:
     # - 4 identical lights.
     # - 7 channels per light (R, G, B, *, *, *, luminosity).
@@ -25,17 +23,18 @@ def dmx_set_values(red: int, green: int, blue: int, luminosity: int) -> dict:
     # - The first light's address is 0.
     # - All lights occupy a continuous range of addresses.
     global _dmx_values
-    _dmx_values['red'] = red
-    _dmx_values['green'] = green
-    _dmx_values['blue'] = blue
-    _dmx_values['luminosity'] = luminosity
+    _dmx_values = {
+        'color': color,
+        'luminosity': luminosity,
+    }
+    red = int(color[1:3], 16)
+    green = int(color[3:5], 16)
+    blue = int(color[5:7], 16)
     ola_dmx_values = '%s,%s,%s,0,0,0,%s' % (red, green, blue, luminosity)
-    print(['ola_set_dmx', '-u', '1', '-d', ola_dmx_values])
     call(['ola_set_dmx', '-u', '1', '-d', ola_dmx_values])
     return _dmx_values
 
 
 # Reset the lights.
 # @todo Does this execute every single time the module is included?
-dmx_set_values(_dmx_values['red'], _dmx_values['green'], _dmx_values['blue'],
-               _dmx_values['luminosity'])
+dmx_set_values(_dmx_values['color'], _dmx_values['luminosity'])
