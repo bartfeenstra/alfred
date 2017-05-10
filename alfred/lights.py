@@ -30,7 +30,7 @@ def dmx_set_values(color: str, luminosity: int) -> dict:
     red = int(color[1:3], 16)
     green = int(color[3:5], 16)
     blue = int(color[5:7], 16)
-    ola_dmx_values = '%s,%s,%s,0,0,0,%s' % (red, green, blue, luminosity)
+    ola_dmx_values = ','.join(['%s,%s,%s,0,0,0,%s' % (red, green, blue, luminosity)] * 4)
     call(['ola_set_dmx', '-u', '1', '-d', ola_dmx_values])
     return _dmx_values
 
