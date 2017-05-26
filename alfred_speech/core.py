@@ -42,13 +42,13 @@ class Command(object):
 class Brain(object):
     @contract
     def __init__(self, ear: Ear,
-                 superglobal_context: Context):
+                 global_context: Context):
         self._ear = ear
-        self._superglobal_context = superglobal_context
+        self._global_context = global_context
 
     def listen(self):
         while True:
-            context = self._superglobal_context
+            context = self._global_context
             for phrase in self._ear.listen():
                 print(phrase)
                 context = self._create_context(self._run_command(phrase,
@@ -56,8 +56,8 @@ class Brain(object):
 
     @contract
     def _create_context(self, context: Context) -> Context:
-        context.commands += self._superglobal_context.commands
-        context.mouth = self._superglobal_context.mouth
+        context.commands += self._global_context.commands
+        context.mouth = self._global_context.mouth
         return context
 
     @contract
