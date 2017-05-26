@@ -20,3 +20,4 @@ pytz==2017.2
 singledispatch==3.4.0.3
 six==1.10.0
 typing==3.6.1
+webcolors==1.7

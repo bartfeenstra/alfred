@@ -5,10 +5,21 @@ import sys
 import os
 
 sys.path.append(os.path.dirname(__file__) + '/../')
-from alfred_speech.listen import Brain, SphinxEar, Pico2WaveMouth
+
+from alfred_speech.contrib.commands import CallSign, CurrentDate, CurrentTime, \
+    Lights
+from alfred_speech.core import Brain, Context
+from alfred_speech.contrib.ears import SphinxEar
+from alfred_speech.contrib.mouths import Pico2WaveMouth
 
 if __name__ == "__main__":
-    ear = SphinxEar()
-    mouth = Pico2WaveMouth()
-    brain = Brain(ear, mouth, ['Computer'], 5)
+    global_commands = [
+        CurrentDate(),
+        CurrentTime(),
+        Lights(),
+    ]
+    superglobal_context = Context()
+    superglobal_context.commands = [CallSign(['Computer'], global_commands)]
+    superglobal_context.mouth = Pico2WaveMouth()
+    brain = Brain(SphinxEar(), superglobal_context)
     brain.listen()
