@@ -1,5 +1,5 @@
 from django.conf.urls import url
-from alfred.graphql import Schema
+from alfred_graphql.graphql import Schema
 from graphene_django.views import GraphQLView
 
 urlpatterns = [
