@@ -25,6 +25,12 @@ class Context(object):
 
 
 class Command(object):
+    @property
+    @contract
+    @abc.abstractmethod
+    def name(self) -> str:
+        pass
+
     @contract
     @abc.abstractmethod
     def applies(self, phrase: str) -> bool:
@@ -56,7 +62,8 @@ class Brain(object):
 
     @contract
     def _create_context(self, context: Context) -> Context:
-        context.commands += self._global_context.commands
+        context.commands = list(set(context.commands +
+                                    self._global_context.commands))
         context.mouth = self._global_context.mouth
         return context
 

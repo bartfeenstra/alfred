@@ -14,6 +14,11 @@ class CallSign(Command):
         self._call_signs = call_signs
         self._commands = commands
 
+    @property
+    @contract
+    def name(self) -> str:
+        return self._call_signs[0]
+
     @contract
     def applies(self, phrase: str) -> bool:
         for call_sign in self._call_signs:
@@ -34,6 +39,29 @@ class CallSign(Command):
         return context
 
 
+class Help(Command):
+    @contract
+    def applies(self, phrase: str) -> bool:
+        match = re.search('^help$', phrase,
+                          re.IGNORECASE)
+        return match is not None
+
+    @property
+    @contract
+    def name(self) -> str:
+        return 'help'
+
+    @contract
+    def execute(self, phrase: str, context: Context):
+        def get_name(command: Command):
+            return command.name
+
+        names = list(map(get_name, context.commands))
+        context.mouth.say('You have %d options: %s.' % (len(names), ', or, '
+                                                                    ''.join(
+            names)))
+
+
 class CurrentDate(Command):
     @contract
     def applies(self, phrase: str) -> bool:
@@ -47,6 +75,11 @@ class CurrentDate(Command):
             if match is not None:
                 return True
         return False
+
+    @property
+    @contract
+    def name(self) -> str:
+        return 'What day is it?'
 
     @contract
     def execute(self, phrase: str, context: Context):
@@ -82,6 +115,11 @@ class CurrentTime(Command):
                 return True
         return False
 
+    @property
+    @contract
+    def name(self) -> str:
+        return 'What time is it?'
+
     @contract
     def execute(self, phrase: str, context: Context):
         now = datetime.datetime.now()
@@ -101,6 +139,11 @@ class ChangeLights(Command):
             except ValueError:
                 pass
         return False
+
+    @property
+    @contract
+    def name(self) -> str:
+        return 'the name of a color'
 
     @contract
     def execute(self, phrase: str, context: Context):
@@ -125,6 +168,11 @@ class LightsOff(Command):
                 return True
         return False
 
+    @property
+    @contract
+    def name(self) -> str:
+        return 'off'
+
     @contract
     def execute(self, phrase: str, context: Context):
         dmx_values = dmx_get_values()
@@ -143,6 +191,11 @@ class LightsOn(Command):
                 return True
         return False
 
+    @property
+    @contract
+    def name(self) -> str:
+        return 'on'
+
     @contract
     def execute(self, phrase: str, context: Context):
         dmx_values = dmx_get_values()
@@ -160,6 +213,11 @@ class DimLights(Command):
             if match is not None:
                 return True
         return False
+
+    @property
+    @contract
+    def name(self) -> str:
+        return 'dim'
 
     @contract
     def execute(self, phrase: str, context: Context):
@@ -180,6 +238,11 @@ class BrightenLights(Command):
                 return True
         return False
 
+    @property
+    @contract
+    def name(self) -> str:
+        return 'brighten'
+
     @contract
     def execute(self, phrase: str, context: Context):
         dmx_values = dmx_get_values()
@@ -199,9 +262,14 @@ class Lights(Command):
                 return True
         return False
 
+    @property
+    @contract
+    def name(self) -> str:
+        return 'lights'
+
     @contract
     def execute(self, phrase: str, context: Context):
-        context.mouth.say('Lights')
+        context.mouth.say(self.name)
 
     @contract
     def get_context(self, context: Context) -> Context:
