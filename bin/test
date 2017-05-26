@@ -3,4 +3,5 @@
 (
     cd `dirname "$0"`/.. &&
     flake8 ./alfred
+    flake8 ./alfred_graphql
 )
