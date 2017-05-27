@@ -47,7 +47,7 @@ class Listener(object):
     def listen(self):
         while True:
             self._environment.interactions = list(map(self._interactions.get,
-                                                 self._environment.global_interaction_ids))
+                                                      self._environment.global_interaction_ids)) # noqa 501
             for phrase in self._ear.listen():
                 print(phrase)
                 self._interact(phrase)
@@ -61,7 +61,7 @@ class Listener(object):
                 # If the interaction returned new interactions, update the
                 # environment.
                 if next_interaction_ids:
-                    self._environment.interactions =list(map(
+                    self._environment.interactions = list(map(
                         self._interactions.get,
                         next_interaction_ids +
                         self._environment.global_interaction_ids))
