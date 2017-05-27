@@ -7,8 +7,8 @@ import os
 sys.path.append(os.path.dirname(__file__) + '/../')
 
 from alfred_speech.core import Environment, Listener
-from alfred_speech.contrib.ears import SphinxEar
-from alfred_speech.contrib.mouths import Pico2WaveMouth
+from alfred_speech.contrib.inputs import SphinxInput
+from alfred_speech.contrib.outputs import Pico2WaveOutput
 
 if __name__ == "__main__":
     global_interaction_ids = [
@@ -20,8 +20,8 @@ if __name__ == "__main__":
         'alfred_speech.contrib.interactions.CurrentTime',
         'alfred_speech.contrib.interactions.Lights',
     ]
-    ear = SphinxEar()
-    mouth = Pico2WaveMouth()
+    ear = SphinxInput()
+    mouth = Pico2WaveOutput()
     environment = Environment(mouth, ['Computer'],
                               global_interaction_ids,
                               root_interaction_ids)

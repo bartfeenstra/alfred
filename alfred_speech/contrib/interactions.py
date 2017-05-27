@@ -24,7 +24,7 @@ class CallSign(Interaction):
 
     @contract
     def enter(self, state: State) -> Sequence[str]:
-        self._environment.mouth.say('Yes?')
+        self._environment.output.say('Yes?')
         return self._environment.root_interaction_ids
 
 
@@ -48,7 +48,7 @@ class Help(Interaction):
 
         names = list(map(get_name,
                          self._environment.interactions))
-        self._environment.mouth.say(
+        self._environment.output.say(
             'You have %d options: %s.' % (len(names), ', or, '
                                                       ''.join(
                 names)))
@@ -90,7 +90,7 @@ class CurrentDate(Interaction):
             11: 'November',
             12: 'December',
         }
-        self._environment.mouth.say(
+        self._environment.output.say(
             'It\'s %s %d.' % (months[now.month], now.day))
         return []
 
@@ -119,7 +119,7 @@ class CurrentTime(Interaction):
         hour = now.hour
         if hour > 12:
             hour -= 12
-        self._environment.mouth.say('It is %d:%d.' % (hour, now.minute))
+        self._environment.output.say('It is %d:%d.' % (hour, now.minute))
         return []
 
 
@@ -263,7 +263,7 @@ class Lights(Interaction):
 
     @contract
     def enter(self, state: State) -> Sequence[str]:
-        self._environment.mouth.say(self.name)
+        self._environment.output.say(self.name)
         return [
             'alfred_speech.contrib.interactions.DimLights',
             'alfred_speech.contrib.interactions.BrightenLights',

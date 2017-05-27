@@ -1,11 +1,11 @@
 from typing import Iterable
 
-from alfred_speech.core import Ear
+from alfred_speech.core import Input
 from contracts import contract
 from pocketsphinx import LiveSpeech
 
 
-class SphinxEar(Ear):
+class SphinxInput(Input):
     def __init__(self):
         self._sphinx = LiveSpeech()
 
@@ -18,7 +18,7 @@ class SphinxEar(Ear):
             pass
 
 
-class StdInEar(Ear):
+class StdInput(Input):
     @contract
     def listen(self) -> Iterable[str]:
         try:

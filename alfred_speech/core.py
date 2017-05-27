@@ -5,14 +5,14 @@ import importlib
 from contracts import contract
 
 
-class Ear(object):
+class Input(object):
     @contract
     @abc.abstractmethod
     def listen(self) -> Iterable[str]:
         pass
 
 
-class Mouth(object):
+class Output(object):
     @contract
     @abc.abstractmethod
     def say(self, phrase: str):
@@ -26,11 +26,11 @@ class State(object):
 class Environment(object):
     @contract
     def __init__(self,
-                 mouth: Mouth, call_signs: List[str],
+                 output: Output, call_signs: List[str],
                  global_interaction_ids:
                  List[str],
                  root_interaction_ids: List[str]):
-        self.mouth = mouth
+        self.output = output
         self.global_interaction_ids = global_interaction_ids
         self.root_interaction_ids = root_interaction_ids
         self.call_signs = call_signs
@@ -80,15 +80,15 @@ class InteractionRepository(object):
 
 class Listener(object):
     @contract
-    def __init__(self, ear: Ear, environment: Environment):
-        self._ear = ear
+    def __init__(self, input: Input, environment: Environment):
+        self._input = input
         self._environment = environment
         self._interactions = InteractionRepository(environment)
 
     def listen(self):
         self._environment.interactions = list(map(self._interactions.get,
                                                   self._environment.global_interaction_ids))  # noqa 501
-        for phrase in self._ear.listen():
+        for phrase in self._input.listen():
             self.interact(phrase)
 
     @contract
