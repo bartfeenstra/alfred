@@ -58,8 +58,8 @@ class Help(Interaction):
 class CurrentDate(Interaction):
     def knows(self, phrase: str) -> Optional[State]:
         key_phrases = [
-            'what day is it',
-            'what\'s today\'s date',
+            '(what|which) (day|date) is it',
+            '(what is|what\'s) *(the|today\'s) *date',
             'what is today\'s date',
         ]
         for key_phrase in key_phrases:
