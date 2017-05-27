@@ -1,50 +1,40 @@
 import datetime
-from typing import Sequence
+from typing import Sequence, Optional
 
-import copy
 import re
 from alfred.lights import dmx_get_values, dmx_set_values
-from alfred_speech.core import Command, Context
+from alfred_speech.core import Interaction, State
 from contracts import contract
 from webcolors import name_to_hex
 
 
-class CallSign(Command):
-    def __init__(self, call_signs: Sequence[str], commands: Sequence[Command]):
-        self._call_signs = call_signs
-        self._commands = commands
-
+class CallSign(Interaction):
     @property
     @contract
     def name(self) -> str:
-        return self._call_signs[0]
+        return self._environment.call_signs[0]
 
-    @contract
-    def applies(self, phrase: str) -> bool:
-        for call_sign in self._call_signs:
+    def knows(self, phrase: str) -> Optional[State]:
+        for call_sign in self._environment.call_signs:
             match = re.search('(^| )%s($| )' % call_sign, phrase,
                               re.IGNORECASE)
             if match is not None:
-                return True
-        return False
+                return State()
+        return None
 
     @contract
-    def execute(self, phrase: str, context: Context):
-        context.mouth.say('Yes?')
-
-    @contract
-    def get_context(self, context: Context) -> Context:
-        context = copy.deepcopy(context)
-        context.commands = self._commands + [self]
-        return context
+    def enter(self, state: State) -> Sequence[str]:
+        self._environment.mouth.say('Yes?')
+        return self._environment.root_interaction_ids
 
 
-class Help(Command):
-    @contract
-    def applies(self, phrase: str) -> bool:
+class Help(Interaction):
+    def knows(self, phrase: str) -> Optional[State]:
         match = re.search('^help$', phrase,
                           re.IGNORECASE)
-        return match is not None
+        if match is not None:
+            return State()
+        return None
 
     @property
     @contract
@@ -52,19 +42,21 @@ class Help(Command):
         return 'help'
 
     @contract
-    def execute(self, phrase: str, context: Context):
-        def get_name(command: Command):
+    def enter(self, state: State) -> Sequence[str]:
+        def get_name(command: Interaction):
             return command.name
 
-        names = list(map(get_name, context.commands))
-        context.mouth.say('You have %d options: %s.' % (len(names), ', or, '
-                                                                    ''.join(
-            names)))
+        names = list(map(get_name,
+                         self._environment.interactions))
+        self._environment.mouth.say(
+            'You have %d options: %s.' % (len(names), ', or, '
+                                                      ''.join(
+                names)))
+        return []
 
 
-class CurrentDate(Command):
-    @contract
-    def applies(self, phrase: str) -> bool:
+class CurrentDate(Interaction):
+    def knows(self, phrase: str) -> Optional[State]:
         key_phrases = [
             'what day is it',
             'what\'s today\'s date',
@@ -73,8 +65,8 @@ class CurrentDate(Command):
         for key_phrase in key_phrases:
             match = re.search('^%s$' % key_phrase, phrase, re.IGNORECASE)
             if match is not None:
-                return True
-        return False
+                return State()
+        return None
 
     @property
     @contract
@@ -82,7 +74,7 @@ class CurrentDate(Command):
         return 'What day is it?'
 
     @contract
-    def execute(self, phrase: str, context: Context):
+    def enter(self, state: State) -> Sequence[str]:
         now = datetime.datetime.now()
         months = {
             1: 'January',
@@ -98,12 +90,13 @@ class CurrentDate(Command):
             11: 'November',
             12: 'December',
         }
-        context.mouth.say('It\'s %s %d.' % (months[now.month], now.day))
+        self._environment.mouth.say(
+            'It\'s %s %d.' % (months[now.month], now.day))
+        return []
 
 
-class CurrentTime(Command):
-    @contract
-    def applies(self, phrase: str) -> bool:
+class CurrentTime(Interaction):
+    def knows(self, phrase: str) -> Optional[State]:
         key_phrases = [
             'what time is it',
             'what\'s the time',
@@ -112,8 +105,8 @@ class CurrentTime(Command):
         for key_phrase in key_phrases:
             match = re.search('^%s$' % key_phrase, phrase, re.IGNORECASE)
             if match is not None:
-                return True
-        return False
+                return State()
+        return None
 
     @property
     @contract
@@ -121,24 +114,26 @@ class CurrentTime(Command):
         return 'What time is it?'
 
     @contract
-    def execute(self, phrase: str, context: Context):
+    def enter(self, state: State) -> Sequence[str]:
         now = datetime.datetime.now()
         hour = now.hour
         if hour > 12:
             hour -= 12
-        context.mouth.say('It is %d:%d.' % (hour, now.minute))
+        self._environment.mouth.say('It is %d:%d.' % (hour, now.minute))
+        return []
 
 
-class ChangeLights(Command):
-    @contract
-    def applies(self, phrase: str) -> bool:
+class ChangeLights(Interaction):
+    def knows(self, phrase: str) -> Optional[State]:
         for word in phrase.split():
             try:
                 name_to_hex(word)
-                return True
+                state = State()
+                state.phrase = phrase
+                return state
             except ValueError:
                 pass
-        return False
+        return None
 
     @property
     @contract
@@ -146,27 +141,27 @@ class ChangeLights(Command):
         return 'the name of a color'
 
     @contract
-    def execute(self, phrase: str, context: Context):
+    def enter(self, state: State) -> Sequence[str]:
         dmx_values = dmx_get_values()
-        for word in phrase.split():
+        for word in state.phrase.split():
             try:
                 color = name_to_hex(word)
                 dmx_set_values(color, dmx_values['luminosity'])
             except ValueError:
                 pass
+        return []
 
 
-class LightsOff(Command):
-    @contract
-    def applies(self, phrase: str) -> bool:
+class LightsOff(Interaction):
+    def knows(self, phrase: str) -> Optional[State]:
         key_phrases = [
             '^off|dark$',
         ]
         for key_phrase in key_phrases:
             match = re.search('^%s$' % key_phrase, phrase, re.IGNORECASE)
             if match is not None:
-                return True
-        return False
+                return State()
+        return None
 
     @property
     @contract
@@ -174,22 +169,22 @@ class LightsOff(Command):
         return 'off'
 
     @contract
-    def execute(self, phrase: str, context: Context):
+    def enter(self, state: State) -> Sequence[str]:
         dmx_values = dmx_get_values()
         dmx_set_values(dmx_values['color'], 0)
+        return []
 
 
-class LightsOn(Command):
-    @contract
-    def applies(self, phrase: str) -> bool:
+class LightsOn(Interaction):
+    def knows(self, phrase: str) -> Optional[State]:
         key_phrases = [
             '^on|full|light|bright$',
         ]
         for key_phrase in key_phrases:
             match = re.search('^%s$' % key_phrase, phrase, re.IGNORECASE)
             if match is not None:
-                return True
-        return False
+                return State()
+        return None
 
     @property
     @contract
@@ -197,22 +192,22 @@ class LightsOn(Command):
         return 'on'
 
     @contract
-    def execute(self, phrase: str, context: Context):
+    def enter(self, state: State) -> Sequence[str]:
         dmx_values = dmx_get_values()
         dmx_set_values(dmx_values['color'], 255)
+        return []
 
 
-class DimLights(Command):
-    @contract
-    def applies(self, phrase: str) -> bool:
+class DimLights(Interaction):
+    def knows(self, phrase: str) -> Optional[State]:
         key_phrases = [
             '^dim|damn$',
         ]
         for key_phrase in key_phrases:
             match = re.search('^%s$' % key_phrase, phrase, re.IGNORECASE)
             if match is not None:
-                return True
-        return False
+                return State()
+        return None
 
     @property
     @contract
@@ -220,23 +215,23 @@ class DimLights(Command):
         return 'dim'
 
     @contract
-    def execute(self, phrase: str, context: Context):
+    def enter(self, state: State) -> Sequence[str]:
         dmx_values = dmx_get_values()
         luminosity = max(dmx_values['luminosity'] - 25, 0)
         dmx_set_values(dmx_values['color'], luminosity)
+        return []
 
 
-class BrightenLights(Command):
-    @contract
-    def applies(self, phrase: str) -> bool:
+class BrightenLights(Interaction):
+    def knows(self, phrase: str) -> Optional[State]:
         key_phrases = [
             '^bright(e|o)n|right in$',
         ]
         for key_phrase in key_phrases:
             match = re.search('^%s$' % key_phrase, phrase, re.IGNORECASE)
             if match is not None:
-                return True
-        return False
+                return State()
+        return None
 
     @property
     @contract
@@ -244,23 +239,22 @@ class BrightenLights(Command):
         return 'brighten'
 
     @contract
-    def execute(self, phrase: str, context: Context):
+    def enter(self, state: State) -> Sequence[str]:
         dmx_values = dmx_get_values()
         luminosity = min(dmx_values['luminosity'] + 25, 255)
         dmx_set_values(dmx_values['color'], luminosity)
 
 
-class Lights(Command):
-    @contract
-    def applies(self, phrase: str) -> bool:
+class Lights(Interaction):
+    def knows(self, phrase: str) -> Optional[State]:
         key_phrases = [
             '^(set|change)* *(the)* *(light|lights|lamp|lamps)+$',
         ]
         for key_phrase in key_phrases:
             match = re.search('^%s$' % key_phrase, phrase, re.IGNORECASE)
             if match is not None:
-                return True
-        return False
+                return State()
+        return None
 
     @property
     @contract
@@ -268,19 +262,14 @@ class Lights(Command):
         return 'lights'
 
     @contract
-    def execute(self, phrase: str, context: Context):
-        context.mouth.say(self.name)
-
-    @contract
-    def get_context(self, context: Context) -> Context:
-        context = copy.deepcopy(context)
-        context.commands = [
-            DimLights(),
-            BrightenLights(),
-            LightsOn(),
-            LightsOff(),
+    def enter(self, state: State) -> Sequence[str]:
+        self._environment.mouth.say(self.name)
+        return [
+            'alfred_speech.contrib.interactions.DimLights',
+            'alfred_speech.contrib.interactions.BrightenLights',
+            'alfred_speech.contrib.interactions.LightsOn',
+            'alfred_speech.contrib.interactions.LightsOff',
             # ChangeLights is last, because it matches a wide and varying
             # list of phrases.
-            ChangeLights(),
+            'alfred_speech.contrib.interactions.ChangeLights',
         ]
-        return context
