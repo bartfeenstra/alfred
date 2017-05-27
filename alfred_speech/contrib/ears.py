@@ -11,5 +11,17 @@ class SphinxEar(Ear):
 
     @contract
     def listen(self) -> Iterable[str]:
-        for phrase in self._sphinx:
-            yield str(phrase)
+        try:
+            for phrase in self._sphinx:
+                yield str(phrase)
+        except (StopIteration, RuntimeError):
+            pass
+
+
+class StdInEar(Ear):
+    @contract
+    def listen(self) -> Iterable[str]:
+        try:
+            yield input('Say something:')
+        except EOFError:
+            pass
