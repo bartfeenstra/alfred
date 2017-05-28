@@ -91,8 +91,9 @@ class Listener(object):
         self._input = environment.plugins.get(environment.input_id)
 
     def listen(self):
-        self._environment.interactions = list(map(self._environment.plugins.get,
-                                                  self._environment.global_interaction_ids))  # noqa 501
+        self._environment.interactions = list(
+            map(self._environment.plugins.get,
+                self._environment.global_interaction_ids))  # noqa 501
         for phrase in self._input.listen():
             self.interact(phrase)
 
