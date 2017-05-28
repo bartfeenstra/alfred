@@ -5,14 +5,41 @@ import importlib
 from contracts import contract
 
 
-class Input(object):
+class Environment(object):
+    @contract
+    def __init__(self, input_id: str,
+                 output_id: str, call_signs: List[str],
+                 global_interaction_ids:
+                 List[str],
+                 root_interaction_ids: List[str]):
+        self.call_signs = call_signs
+        self.global_interaction_ids = global_interaction_ids
+        self.input_id = input_id
+        self.interactions = []
+        self.plugins = PluginRepository(self)
+        self.output_id = output_id
+        self.output = self.plugins.get(output_id)
+        self.root_interaction_ids = root_interaction_ids
+
+
+class Plugin(object):
+    @contract
+    def __init__(self, environment: Environment):
+        self._environment = environment
+
+    @property
+    def id(self) -> str:
+        return self.__class__.__module__ + '.' + self.__class__.__name__
+
+
+class Input(Plugin):
     @contract
     @abc.abstractmethod
     def listen(self) -> Iterable[str]:
         pass
 
 
-class Output(object):
+class Output(Plugin):
     @contract
     @abc.abstractmethod
     def say(self, phrase: str):
@@ -23,25 +50,7 @@ class State(object):
     pass
 
 
-class Environment(object):
-    @contract
-    def __init__(self,
-                 output: Output, call_signs: List[str],
-                 global_interaction_ids:
-                 List[str],
-                 root_interaction_ids: List[str]):
-        self.output = output
-        self.global_interaction_ids = global_interaction_ids
-        self.root_interaction_ids = root_interaction_ids
-        self.call_signs = call_signs
-        self.interactions = []
-
-
-class Interaction(object):
-    @contract
-    def __init__(self, environment: Environment):
-        self._environment = environment
-
+class Interaction(Plugin):
     @property
     @contract
     @abc.abstractmethod
@@ -62,43 +71,39 @@ class Interaction(object):
         pass
 
 
-class InteractionRepository(object):
+class PluginRepository(object):
+    @contract
     def __init__(self, environment: Environment):
         self._environment = environment
-        self._interactions = {}
 
     @contract
-    def get(self, id: str) -> Interaction:
-        if id in self._interactions:
-            return self._interactions[id]
-        module_name, class_name = id.rsplit('.', 1)
+    def get(self, name: str) -> Plugin:
+        module_name, class_name = name.rsplit('.', 1)
         module = importlib.import_module(module_name)
         cls = getattr(module, class_name)
-        self._interactions[id] = cls(self._environment)
-        return self._interactions[id]
+        return cls(self._environment)
 
 
 class Listener(object):
     @contract
-    def __init__(self, input: Input, environment: Environment):
-        self._input = input
+    def __init__(self, environment: Environment):
         self._environment = environment
-        self._interactions = InteractionRepository(environment)
+        self._input = environment.plugins.get(environment.input_id)
 
     def listen(self):
-        self._environment.interactions = list(map(self._interactions.get,
+        self._environment.interactions = list(map(self._environment.plugins.get,
                                                   self._environment.global_interaction_ids))  # noqa 501
         for phrase in self._input.listen():
             self.interact(phrase)
 
     @contract
     def interact(self, phrase: str):
-        interaction, state = self.__find_interaction(phrase)
+        interaction, state = self._find_interaction(phrase)
         if interaction is not None:
-            self.__enter_interaction(interaction, state)
+            self._enter_interaction(interaction, state)
 
-    def __find_interaction(self, phrase: str) -> Tuple[Optional[Interaction],
-                                                       State]:
+    def _find_interaction(self, phrase: str) -> Tuple[Optional[Interaction],
+                                                      State]:
         for interaction in self._environment.interactions:
             state = interaction.knows(phrase)
             if isinstance(state, State):
@@ -106,12 +111,12 @@ class Listener(object):
         return None, State()
 
     @contract
-    def __enter_interaction(self, interaction: Interaction, state: State):
+    def _enter_interaction(self, interaction: Interaction, state: State):
         next_interaction_ids = interaction.enter(state)
         # If the interaction returned new interactions, update the
         # environment.
         if next_interaction_ids:
             self._environment.interactions = list(map(
-                self._interactions.get,
+                self._environment.plugins.get,
                 next_interaction_ids +
                 self._environment.global_interaction_ids))

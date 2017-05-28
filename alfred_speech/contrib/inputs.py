@@ -1,12 +1,13 @@
 from typing import Iterable
 
-from alfred_speech.core import Input
+from alfred_speech.core import Input, Environment
 from contracts import contract
 from pocketsphinx import LiveSpeech
 
 
 class SphinxInput(Input):
-    def __init__(self):
+    def __init__(self, environment: Environment):
+        super(SphinxInput, self).__init__(environment)
         self._sphinx = LiveSpeech()
 
     @contract
