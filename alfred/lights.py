@@ -1,20 +1,16 @@
 from subprocess import call
 
-from contracts import contract
-
 _dmx_values = {
     'color': '#abcdef',
     'luminosity': 0,
 }
 
 
-@contract()
 def dmx_get_values() -> dict:
     global _dmx_values
     return _dmx_values
 
 
-@contract
 def dmx_set_values(color: str, luminosity: int) -> dict:
     # This assumes:
     # - 4 identical lights.

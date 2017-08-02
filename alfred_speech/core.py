@@ -2,7 +2,6 @@ from typing import Iterable, Optional, Tuple, List
 
 import abc
 import importlib
-from contracts import contract
 
 
 def qualname(cls) -> str:
@@ -10,7 +9,7 @@ def qualname(cls) -> str:
 
 
 class Configuration(object):
-    @contract
+
     def __init__(self, input_id: str,
                  output_id: str, call_signs: List[str],
                  global_interaction_ids:
@@ -30,14 +29,12 @@ class Plugin(object):
 
 
 class Input(Plugin):
-    @contract
     @abc.abstractmethod
     def listen(self) -> Iterable[str]:
         pass
 
 
 class Output(Plugin):
-    @contract
     @abc.abstractmethod
     def say(self, phrase: str):
         pass
@@ -49,7 +46,6 @@ class State(object):
 
 class Interaction(Plugin):
     @property
-    @contract
     @abc.abstractmethod
     def name(self) -> str:
         pass
@@ -63,12 +59,10 @@ class Interaction(Plugin):
         """
         pass
 
-    @contract
     @abc.abstractmethod
     def enter(self, state: State):
         pass
 
-    @contract
     def get_interactions(self) -> Iterable['Interaction']:
         return []
 
@@ -85,7 +79,7 @@ class InteractionObserver(object):
 
 
 class Environment(InteractionObserver):
-    @contract
+
     def __init__(self, configuration: Configuration):
         self._plugins = PluginRepository(self)
         self._configuration = configuration
@@ -95,12 +89,10 @@ class Environment(InteractionObserver):
         self._set_available_interactions()
 
     @property
-    @contract
     def configuration(self) -> Configuration:
         return self._configuration
 
     @property
-    @contract
     def output(self) -> Output:
         return self._output
 
@@ -109,12 +101,10 @@ class Environment(InteractionObserver):
         return self._plugins
 
     @property
-    @contract
     def current_interaction(self) -> Interaction:
         return self._current_interaction
 
     @property
-    @contract
     def available_interactions(self) -> List[Interaction]:
         return self._available_interactions
 
@@ -124,7 +114,6 @@ class Environment(InteractionObserver):
             map(self.plugins.get,
                 self.configuration.global_interaction_ids))
 
-    @contract
     def post_enter_interaction(self, current_interaction: Interaction,
                                state: State,
                                available_interactions: List[Interaction]):
@@ -153,7 +142,6 @@ class Listener(object):
                 return interaction, state
         return None, State()
 
-    @contract
     def _enter_interaction(self, interaction: Interaction, state: State):
         for observer in self._observers:
             observer.pre_enter_interaction(interaction, state)
@@ -171,11 +159,10 @@ class EnvironmentAwareFactory(object):
 
 
 class PluginRepository(object):
-    @contract
+
     def __init__(self, environment: Environment):
         self._environment = environment
 
-    @contract
     def get(self, name: str) -> Plugin:
         # Load the class.
         module_name, class_name = name.rsplit('.', 1)

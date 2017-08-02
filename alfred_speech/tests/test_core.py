@@ -6,7 +6,6 @@ from alfred_speech.core import PluginRepository, Environment, \
     Plugin, \
     qualname, EnvironmentAwareFactory, Configuration, Interaction, Listener, \
     State
-from contracts import contract
 
 
 class PluginRepositoryTest(TestCase):
@@ -34,7 +33,6 @@ class PluginWithoutFactory(Plugin):
 
 class PluginWithFactory(Plugin, EnvironmentAwareFactory):
     @classmethod
-    @contract
     def create(cls, environment: Environment):
         return cls()
 
@@ -154,17 +152,14 @@ class FooInteraction(EnvironmentAwareInteraction):
     def name(self) -> str:
         return 'Foo'
 
-    @contract
     def knows(self, phrase: str):
         if self.name == phrase:
             return State()
         return None
 
-    @contract
     def enter(self, state: State):
         pass
 
-    @contract
     def get_interactions(self) -> Iterable[Interaction]:
         return [self._environment.plugins.get(
             qualname(BarInteraction))]
@@ -175,12 +170,10 @@ class BarInteraction(EnvironmentAwareInteraction):
     def name(self) -> str:
         return 'Bar'
 
-    @contract
     def knows(self, phrase: str):
         if self.name == phrase:
             return State()
         return None
 
-    @contract
     def enter(self, state: State):
         self._environment.output.say(self.name)

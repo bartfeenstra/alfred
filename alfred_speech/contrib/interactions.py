@@ -5,12 +5,11 @@ import re
 from alfred.lights import dmx_get_values, dmx_set_values
 from alfred_speech.core import Interaction, State, EnvironmentAwareFactory, \
     Environment
-from contracts import contract
 from webcolors import name_to_hex
 
 
 class EnvironmentAwareInteraction(Interaction, EnvironmentAwareFactory):
-    @contract
+
     def __init__(self, environment: Environment):
         self._environment = environment
 
@@ -21,7 +20,6 @@ class EnvironmentAwareInteraction(Interaction, EnvironmentAwareFactory):
 
 class CallSign(EnvironmentAwareInteraction):
     @property
-    @contract
     def name(self) -> str:
         return self._environment.configuration.call_signs[0]
 
@@ -33,11 +31,9 @@ class CallSign(EnvironmentAwareInteraction):
                 return State()
         return None
 
-    @contract
     def enter(self, state: State):
         self._environment.output.say('Yes?')
 
-    @contract
     def get_interactions(self) -> Iterable[Interaction]:
         return list(map(self._environment.plugins.get,
                         self._environment.configuration.root_interaction_ids))
@@ -52,11 +48,9 @@ class Help(EnvironmentAwareInteraction):
         return None
 
     @property
-    @contract
     def name(self) -> str:
         return 'help'
 
-    @contract
     def enter(self, state: State):
         names = list(map(lambda interaction: interaction.name,
                          self._environment.plugins))
@@ -80,11 +74,9 @@ class CurrentDate(EnvironmentAwareInteraction):
         return None
 
     @property
-    @contract
     def name(self) -> str:
         return 'What day is it?'
 
-    @contract
     def enter(self, state: State):
         now = datetime.datetime.now()
         months = {
@@ -119,11 +111,9 @@ class CurrentTime(EnvironmentAwareInteraction):
         return None
 
     @property
-    @contract
     def name(self) -> str:
         return 'What time is it?'
 
-    @contract
     def enter(self, state: State):
         now = datetime.datetime.now()
         hour = now.hour
@@ -147,11 +137,9 @@ class ChangeLights(Interaction):
         return None
 
     @property
-    @contract
     def name(self) -> str:
         return 'the name of a color'
 
-    @contract
     def enter(self, state: ChangeLightsState):
         dmx_values = dmx_get_values()
         for word in state.phrase.split():
@@ -174,11 +162,9 @@ class LightsOff(Interaction):
         return None
 
     @property
-    @contract
     def name(self) -> str:
         return 'off'
 
-    @contract
     def enter(self, state: State):
         dmx_values = dmx_get_values()
         dmx_set_values(dmx_values['color'], 0)
@@ -196,11 +182,9 @@ class LightsOn(Interaction):
         return None
 
     @property
-    @contract
     def name(self) -> str:
         return 'on'
 
-    @contract
     def enter(self, state: State):
         dmx_values = dmx_get_values()
         dmx_set_values(dmx_values['color'], 255)
@@ -218,11 +202,9 @@ class DimLights(Interaction):
         return None
 
     @property
-    @contract
     def name(self) -> str:
         return 'dim'
 
-    @contract
     def enter(self, state: State):
         dmx_values = dmx_get_values()
         luminosity = max(dmx_values['luminosity'] - 25, 0)
@@ -241,11 +223,9 @@ class BrightenLights(Interaction):
         return None
 
     @property
-    @contract
     def name(self) -> str:
         return 'brighten'
 
-    @contract
     def enter(self, state: State):
         dmx_values = dmx_get_values()
         luminosity = min(dmx_values['luminosity'] + 25, 255)
@@ -264,15 +244,12 @@ class Lights(EnvironmentAwareInteraction):
         return None
 
     @property
-    @contract
     def name(self) -> str:
         return 'lights'
 
-    @contract
     def enter(self, state: State):
         self._environment.output.say(self.name)
 
-    @contract
     def get_interactions(self) -> Iterable[Interaction]:
         return list(map(self._environment.plugins.get,
                     [
