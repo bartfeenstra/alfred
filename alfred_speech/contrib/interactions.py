@@ -1,21 +1,32 @@
 import datetime
-from typing import Sequence, Optional
+from typing import Iterable
 
 import re
 from alfred.lights import dmx_get_values, dmx_set_values
-from alfred_speech.core import Interaction, State
+from alfred_speech.core import Interaction, State, EnvironmentAwareFactory, \
+    Environment
 from contracts import contract
 from webcolors import name_to_hex
 
 
-class CallSign(Interaction):
+class EnvironmentAwareInteraction(Interaction, EnvironmentAwareFactory):
+    @contract
+    def __init__(self, environment: Environment):
+        self._environment = environment
+
+    @classmethod
+    def create(cls, environment: Environment):
+        return cls(environment)
+
+
+class CallSign(EnvironmentAwareInteraction):
     @property
     @contract
     def name(self) -> str:
-        return self._environment.call_signs[0]
+        return self._environment.configuration.call_signs[0]
 
-    def knows(self, phrase: str) -> Optional[State]:
-        for call_sign in self._environment.call_signs:
+    def knows(self, phrase: str):
+        for call_sign in self._environment.configuration.call_signs:
             match = re.search('(^| )%s($| )' % call_sign, phrase,
                               re.IGNORECASE)
             if match is not None:
@@ -23,13 +34,17 @@ class CallSign(Interaction):
         return None
 
     @contract
-    def enter(self, state: State) -> Sequence[str]:
+    def enter(self, state: State):
         self._environment.output.say('Yes?')
-        return self._environment.root_interaction_ids
+
+    @contract
+    def get_interactions(self) -> Iterable[Interaction]:
+        return list(map(self._environment.plugins.get,
+                        self._environment.configuration.root_interaction_ids))
 
 
-class Help(Interaction):
-    def knows(self, phrase: str) -> Optional[State]:
+class Help(EnvironmentAwareInteraction):
+    def knows(self, phrase: str):
         match = re.search('^help$', phrase,
                           re.IGNORECASE)
         if match is not None:
@@ -42,21 +57,17 @@ class Help(Interaction):
         return 'help'
 
     @contract
-    def enter(self, state: State) -> Sequence[str]:
-        def get_name(command: Interaction):
-            return command.name
-
-        names = list(map(get_name,
-                         self._environment.interactions))
+    def enter(self, state: State):
+        names = list(map(lambda interaction: interaction.name,
+                         self._environment.plugins))
         self._environment.output.say(
             'You have %d options: %s.' % (len(names), ', or, '
                                                       ''.join(
                 names)))
-        return []
 
 
-class CurrentDate(Interaction):
-    def knows(self, phrase: str) -> Optional[State]:
+class CurrentDate(EnvironmentAwareInteraction):
+    def knows(self, phrase: str):
         key_phrases = [
             '(what|which) (day|date) is it',
             '(what is|what\'s) *(the|today\'s) *date',
@@ -74,7 +85,7 @@ class CurrentDate(Interaction):
         return 'What day is it?'
 
     @contract
-    def enter(self, state: State) -> Sequence[str]:
+    def enter(self, state: State):
         now = datetime.datetime.now()
         months = {
             1: 'January',
@@ -92,11 +103,10 @@ class CurrentDate(Interaction):
         }
         self._environment.output.say(
             'It\'s %s %d.' % (months[now.month], now.day))
-        return []
 
 
-class CurrentTime(Interaction):
-    def knows(self, phrase: str) -> Optional[State]:
+class CurrentTime(EnvironmentAwareInteraction):
+    def knows(self, phrase: str):
         key_phrases = [
             'what time is it',
             'what\'s the time',
@@ -114,23 +124,24 @@ class CurrentTime(Interaction):
         return 'What time is it?'
 
     @contract
-    def enter(self, state: State) -> Sequence[str]:
+    def enter(self, state: State):
         now = datetime.datetime.now()
         hour = now.hour
         if hour > 12:
             hour -= 12
         self._environment.output.say('It is %d:%d.' % (hour, now.minute))
-        return []
 
 
 class ChangeLights(Interaction):
-    def knows(self, phrase: str) -> Optional[State]:
+    class ChangeLightsState(State):
+        def __init__(self, phrase: str):
+            self.phrase = phrase
+
+    def knows(self, phrase: str):
         for word in phrase.split():
             try:
                 name_to_hex(word)
-                state = State()
-                state.phrase = phrase
-                return state
+                return self.ChangeLightsState(phrase)
             except ValueError:
                 pass
         return None
@@ -141,7 +152,7 @@ class ChangeLights(Interaction):
         return 'the name of a color'
 
     @contract
-    def enter(self, state: State) -> Sequence[str]:
+    def enter(self, state: ChangeLightsState):
         dmx_values = dmx_get_values()
         for word in state.phrase.split():
             try:
@@ -149,11 +160,10 @@ class ChangeLights(Interaction):
                 dmx_set_values(color, dmx_values['luminosity'])
             except ValueError:
                 pass
-        return []
 
 
 class LightsOff(Interaction):
-    def knows(self, phrase: str) -> Optional[State]:
+    def knows(self, phrase: str):
         key_phrases = [
             '^off|dark$',
         ]
@@ -169,14 +179,13 @@ class LightsOff(Interaction):
         return 'off'
 
     @contract
-    def enter(self, state: State) -> Sequence[str]:
+    def enter(self, state: State):
         dmx_values = dmx_get_values()
         dmx_set_values(dmx_values['color'], 0)
-        return []
 
 
 class LightsOn(Interaction):
-    def knows(self, phrase: str) -> Optional[State]:
+    def knows(self, phrase: str):
         key_phrases = [
             '^on|full|light|bright$',
         ]
@@ -192,14 +201,13 @@ class LightsOn(Interaction):
         return 'on'
 
     @contract
-    def enter(self, state: State) -> Sequence[str]:
+    def enter(self, state: State):
         dmx_values = dmx_get_values()
         dmx_set_values(dmx_values['color'], 255)
-        return []
 
 
 class DimLights(Interaction):
-    def knows(self, phrase: str) -> Optional[State]:
+    def knows(self, phrase: str):
         key_phrases = [
             '^dim|damn$',
         ]
@@ -215,15 +223,14 @@ class DimLights(Interaction):
         return 'dim'
 
     @contract
-    def enter(self, state: State) -> Sequence[str]:
+    def enter(self, state: State):
         dmx_values = dmx_get_values()
         luminosity = max(dmx_values['luminosity'] - 25, 0)
         dmx_set_values(dmx_values['color'], luminosity)
-        return []
 
 
 class BrightenLights(Interaction):
-    def knows(self, phrase: str) -> Optional[State]:
+    def knows(self, phrase: str):
         key_phrases = [
             '^bright(e|o)n|right in$',
         ]
@@ -239,14 +246,14 @@ class BrightenLights(Interaction):
         return 'brighten'
 
     @contract
-    def enter(self, state: State) -> Sequence[str]:
+    def enter(self, state: State):
         dmx_values = dmx_get_values()
         luminosity = min(dmx_values['luminosity'] + 25, 255)
         dmx_set_values(dmx_values['color'], luminosity)
 
 
-class Lights(Interaction):
-    def knows(self, phrase: str) -> Optional[State]:
+class Lights(EnvironmentAwareInteraction):
+    def knows(self, phrase: str):
         key_phrases = [
             '^(set|change)* *(the)* *(light|lights|lamp|lamps)+$',
         ]
@@ -262,14 +269,18 @@ class Lights(Interaction):
         return 'lights'
 
     @contract
-    def enter(self, state: State) -> Sequence[str]:
+    def enter(self, state: State):
         self._environment.output.say(self.name)
-        return [
-            'alfred_speech.contrib.interactions.DimLights',
-            'alfred_speech.contrib.interactions.BrightenLights',
-            'alfred_speech.contrib.interactions.LightsOn',
-            'alfred_speech.contrib.interactions.LightsOff',
-            # ChangeLights is last, because it matches a wide and varying
-            # list of phrases.
-            'alfred_speech.contrib.interactions.ChangeLights',
-        ]
+
+    @contract
+    def get_interactions(self) -> Iterable[Interaction]:
+        return list(map(self._environment.plugins.get,
+                    [
+                        'alfred_speech.contrib.interactions.DimLights',
+                        'alfred_speech.contrib.interactions.BrightenLights',
+                        'alfred_speech.contrib.interactions.LightsOn',
+                        'alfred_speech.contrib.interactions.LightsOff',
+                        # ChangeLights is last, because it matches a wide and
+                        # varying list of phrases.
+                        'alfred_speech.contrib.interactions.ChangeLights',
+                    ]))

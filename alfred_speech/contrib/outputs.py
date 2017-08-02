@@ -1,7 +1,6 @@
 import subprocess
 
 import tempfile
-
 from alfred_speech.core import Output
 from contracts import contract
 
@@ -18,3 +17,15 @@ class StdOutput(Output):
     @contract
     def say(self, phrase: str):
         print(phrase)
+
+
+class NullOutput(Output):
+    @contract
+    def say(self, phrase: str):
+        pass
+
+
+class ListOutput(Output, list):
+    @contract
+    def say(self, phrase: str):
+        self.append(phrase)

@@ -1,28 +1,33 @@
 from typing import Iterable
 
-from alfred_speech.core import Input, Environment
+import pocketsphinx
+from alfred_speech.core import Input
 from contracts import contract
-from pocketsphinx import LiveSpeech
 
 
 class SphinxInput(Input):
-    def __init__(self, environment: Environment):
-        super(SphinxInput, self).__init__(environment)
-        self._sphinx = LiveSpeech()
-
     @contract
     def listen(self) -> Iterable[str]:
-        try:
-            for phrase in self._sphinx:
-                yield str(phrase)
-        except (StopIteration, RuntimeError):
-            pass
+        for phrase in pocketsphinx.LiveSpeech():
+            yield str(phrase)
 
 
 class StdInput(Input):
     @contract
     def listen(self) -> Iterable[str]:
-        try:
-            yield input('Say something:')
-        except EOFError:
-            pass
+        while True:
+            try:
+                yield input('Say something:')
+            # Stop iteration when the input ends.
+            except EOFError:
+                raise StopIteration
+            # Stop iteration upon user request.
+            except KeyboardInterrupt:
+                raise StopIteration
+
+
+class ListInput(Input, list):
+    @contract
+    def listen(self) -> Iterable[str]:
+        for phrase in self:
+            yield phrase
