@@ -34,4 +34,4 @@ def dmx_set_values(color: str, luminosity: int) -> dict:
 
 # Reset the lights.
 # @todo Does this execute every single time the module is included?
-dmx_set_values(_dmx_values['color'], _dmx_values['luminosity'])
+# dmx_set_values(_dmx_values['color'], _dmx_values['luminosity'])
