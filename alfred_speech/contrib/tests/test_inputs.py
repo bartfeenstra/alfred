@@ -1,7 +1,6 @@
 from unittest import mock, TestCase
 
 from alfred_speech.contrib import inputs
-from alfred_speech.core import qualname
 import pocketsphinx
 
 
@@ -17,7 +16,7 @@ class SphinxInputTest(TestCase):
             for phrase in SphinxInputTest._speech:
                 yield phrase
 
-    @mock.patch(qualname(pocketsphinx.LiveSpeech), LiveSpeech)
+    @mock.patch('pocketsphinx.LiveSpeech', LiveSpeech)
     def testListen(self,):
         sut = inputs.SphinxInput()
         self.assertEqual(self.__class__._speech, list(sut.listen()))

@@ -5,7 +5,31 @@ from alfred_speech.contrib.interactions import EnvironmentAwareInteraction
 from alfred_speech.core import PluginRepository, Environment, \
     Plugin, \
     qualname, EnvironmentAwareFactory, Configuration, Interaction, Listener, \
-    State
+    State, get_class
+
+
+class QualnameTest(TestCase):
+    class NamedClass(object):
+        pass
+
+    def test(self):
+        self.assertEqual(qualname(self.NamedClass),
+                         'alfred_speech.tests.test_core:QualnameTest'
+                         '.NamedClass')
+
+
+class GetClassTest(TestCase):
+    class LoadableClass(object):
+        pass
+
+    def testSuccess(self):
+        self.assertEqual(get_class(
+            'alfred_speech.tests.test_core:GetClassTest.LoadableClass'),
+            self.LoadableClass)
+
+    def testInvalidName(self):
+        with self.assertRaises(ValueError):
+            get_class('foo-bar')
 
 
 class PluginRepositoryTest(TestCase):
@@ -72,14 +96,14 @@ class ConfigurationTest(TestCase):
 
 class PluginTest(TestCase):
     def testId(self):
-        self.assertEqual('alfred_speech.core.Plugin', Plugin().id)
+        self.assertEqual('alfred_speech.core:Plugin', Plugin().id)
 
 
 class EnvironmentTest(TestCase):
     def setUp(self):
         super().setUp()
-        self._input_id = 'alfred_speech.contrib.inputs.ListInput'
-        self._output_id = 'alfred_speech.contrib.outputs.NullOutput'
+        self._input_id = 'alfred_speech.contrib.inputs:ListInput'
+        self._output_id = 'alfred_speech.contrib.outputs:NullOutput'
         self._call_signs = []
         self._global_interaction_ids = []
         self._root_interaction_ids = []

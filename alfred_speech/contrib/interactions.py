@@ -9,7 +9,6 @@ from webcolors import name_to_hex
 
 
 class EnvironmentAwareInteraction(Interaction, EnvironmentAwareFactory):
-
     def __init__(self, environment: Environment):
         self._environment = environment
 
@@ -49,11 +48,11 @@ class Help(EnvironmentAwareInteraction):
 
     @property
     def name(self) -> str:
-        return 'help'
+        return 'Help'
 
     def enter(self, state: State):
         names = list(map(lambda interaction: interaction.name,
-                         self._environment.plugins))
+                         self._environment.available_interactions))
         self._environment.output.say(
             'You have %d options: %s.' % (len(names), ', or, '
                                                       ''.join(
@@ -252,12 +251,12 @@ class Lights(EnvironmentAwareInteraction):
 
     def get_interactions(self) -> Iterable[Interaction]:
         return list(map(self._environment.plugins.get,
-                    [
-                        'alfred_speech.contrib.interactions.DimLights',
-                        'alfred_speech.contrib.interactions.BrightenLights',
-                        'alfred_speech.contrib.interactions.LightsOn',
-                        'alfred_speech.contrib.interactions.LightsOff',
-                        # ChangeLights is last, because it matches a wide and
-                        # varying list of phrases.
-                        'alfred_speech.contrib.interactions.ChangeLights',
-                    ]))
+                        [
+                            'alfred_speech.contrib.interactions.DimLights',
+                            'alfred_speech.contrib.interactions.BrightenLights',  # noqa: E501
+                            'alfred_speech.contrib.interactions.LightsOn',
+                            'alfred_speech.contrib.interactions.LightsOff',
+                            # ChangeLights is last, because it matches a wide
+                            # and varying list of phrases.
+                            'alfred_speech.contrib.interactions.ChangeLights',
+                        ]))

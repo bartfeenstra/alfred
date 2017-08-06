@@ -2,14 +2,41 @@ from typing import Iterable, Optional, Tuple, List
 
 import abc
 import importlib
+from functools import reduce
 
 
 def qualname(cls) -> str:
-    return cls.__module__ + '.' + cls.__qualname__
+    return cls.__module__ + ':' + cls.__qualname__
+
+
+def get_class(name: str) -> object:
+    # Inner classes are supported by separating their module and qualified
+    # class names by a colon (:). Example: "foo.bar:OuterClass.InnerClass".
+    if -1 != name.find(':'):
+        module_name, class_name = name.split(':', 1)
+    # Alternatively, 'Django-style' class names supports loading outer
+    # classes only. Example: "foo.bar.OuterClass".
+    elif -1 != name.find('.'):
+        module_name, class_name = name.rsplit('.', 1)
+    else:
+        raise ValueError(
+            '"%s" is not a valid globally qualified class name. Module and '
+            'class name segments must be separated by periods. The module and '
+            'class names must be separated from each other using a colon or a '
+            'period (for outer classes only).' % name)
+    module = importlib.import_module(module_name)
+    return reduce(lambda parent, class_name: getattr(parent, class_name),
+                  class_name.split('.'), module)
+
+
+class ComparableValueObject(object):
+    def __eq__(self, other):
+        if self.__class__ is not other.__class__:
+            return False
+        return self.__dict__ == other.__dict__
 
 
 class Configuration(object):
-
     def __init__(self, input_id: str,
                  output_id: str, call_signs: List[str],
                  global_interaction_ids:
@@ -40,7 +67,7 @@ class Output(Plugin):
         pass
 
 
-class State(object):
+class State(ComparableValueObject):
     pass
 
 
@@ -79,7 +106,6 @@ class InteractionObserver(object):
 
 
 class Environment(InteractionObserver):
-
     def __init__(self, configuration: Configuration):
         self._plugins = PluginRepository(self)
         self._configuration = configuration
@@ -159,15 +185,11 @@ class EnvironmentAwareFactory(object):
 
 
 class PluginRepository(object):
-
     def __init__(self, environment: Environment):
         self._environment = environment
 
     def get(self, name: str) -> Plugin:
-        # Load the class.
-        module_name, class_name = name.rsplit('.', 1)
-        module = importlib.import_module(module_name)
-        cls = getattr(module, class_name)
+        cls = get_class(name)
 
         # Instantiate the class.
         if issubclass(cls, EnvironmentAwareFactory):
