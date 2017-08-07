@@ -71,10 +71,11 @@ class ConfigurationTest(TestCase):
             'alfred_speech.contrib.interactions.CallSigns']
         self._root_interaction_ids = [
             'alfred_speech.contrib.interactions.Help']
+        self._locale = 'nl-NL'
         self._sut = Configuration(self._input_id, self._output_id,
                                   self._call_signs,
                                   self._global_interaction_ids,
-                                  self._root_interaction_ids)
+                                  self._root_interaction_ids, self._locale)
 
     def testInputId(self):
         self.assertEqual(self._sut.input_id, self._input_id)
@@ -92,6 +93,9 @@ class ConfigurationTest(TestCase):
     def testRootInteractionIds(self):
         self.assertEqual(self._sut.root_interaction_ids,
                          self._root_interaction_ids)
+
+    def testLocale(self):
+        self.assertEqual(self._sut.locale, self._locale)
 
 
 class PluginTest(TestCase):

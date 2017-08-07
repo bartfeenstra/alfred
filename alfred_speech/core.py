@@ -41,12 +41,13 @@ class Configuration(object):
                  output_id: str, call_signs: List[str],
                  global_interaction_ids:
                  List[str],
-                 root_interaction_ids: List[str]):
+                 root_interaction_ids: List[str], locale: str = 'en-US'):
         self.call_signs = call_signs
         self.global_interaction_ids = global_interaction_ids
         self.input_id = input_id
         self.output_id = output_id
         self.root_interaction_ids = root_interaction_ids
+        self.locale = locale
 
 
 class Plugin(object):

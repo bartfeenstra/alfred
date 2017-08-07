@@ -41,12 +41,15 @@ def run():
     output_id = parser.parse_args().output_id_override
     if output_id is None:
         output_id = configuration_file_contents['output_id']
+    locale = 'en-US'
+    if 'locale' in configuration_file_contents:
+        locale = configuration_file_contents['locale']
     configuration = Configuration(input_id, output_id,
                                   configuration_file_contents['call_signs'],
                                   configuration_file_contents[
                                       'global_interaction_ids'],
                                   configuration_file_contents[
-                                      'root_interaction_ids'])
+                                      'root_interaction_ids'], locale)
     environment = Environment(configuration)
     listener = Listener(environment, environment.plugins.get(input_id))
 

@@ -33,6 +33,10 @@
       "items": {
         "type": "string"
       }
+    },
+    "locale": {
+      "description": "A locale identifier that consists of an ISO 639-1 language code, optionally suffixed by a dash and an ISO 3316 country code. Defaults to en-US.",
+      "type": "string"
     }
   }
 }

@@ -14,7 +14,7 @@ class InteractionTestCase(TestCase):
         self._configuration = Configuration(
             self._input_id,
             self._output_id, self._call_signs, self._global_interaction_ids,
-            self._root_interaction_ids)
+            self._root_interaction_ids, self._locale)
         self._environment = Environment(self._configuration)
 
     def _setUpConfiguration(self):
@@ -23,6 +23,7 @@ class InteractionTestCase(TestCase):
         self._call_signs = ['Hey', 'Alfred']
         self._global_interaction_ids = []
         self._root_interaction_ids = []
+        self._locale = 'en-US'
 
     def assertKnows(self, state: State, speech: Iterable[str]):
         for phrase in speech:
