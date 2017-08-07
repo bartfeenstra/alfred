@@ -6,23 +6,7 @@ import os
 
 sys.path.append(os.path.dirname(__file__) + '/../')
 
-from alfred_speech.core import Environment, Listener, Configuration
+from alfred_speech.cli import run
 
 if __name__ == "__main__":
-    input_id = 'alfred_speech.contrib.inputs.SphinxInput'
-    output_id = 'alfred_speech.contrib.outputs.Pico2WaveOutput'
-    global_interaction_ids = [
-        'alfred_speech.contrib.interactions.CallSign',
-        'alfred_speech.contrib.interactions.Help',
-    ]
-    root_interaction_ids = [
-        'alfred_speech.contrib.interactions.CurrentDate',
-        'alfred_speech.contrib.interactions.CurrentTime',
-        'alfred_speech.contrib.interactions.Lights',
-    ]
-    configuration = Configuration(input_id, output_id, ['Computer'],
-                                         global_interaction_ids,
-                                         root_interaction_ids)
-    environment = Environment(configuration)
-    listener = Listener(environment, environment.plugins.get(input_id))
-    listener.listen()
+    run()

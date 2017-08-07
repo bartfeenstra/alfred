@@ -1,0 +1,15 @@
+{
+  "call_signs": [
+    "Alfred"
+  ],
+  "input_id": "alfred_speech.contrib.inputs.StdInput",
+  "output_id": "alfred_speech.contrib.outputs.StdOutput",
+  "global_interaction_ids": [
+    "alfred_speech.contrib.interactions.CallSign",
+    "alfred_speech.contrib.interactions.Help"
+  ],
+  "root_interaction_ids": [
+    "alfred_speech.contrib.interactions.CurrentDate",
+    "alfred_speech.contrib.interactions.CurrentTime"
+  ]
+}

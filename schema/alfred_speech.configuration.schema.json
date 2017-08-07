@@ -1,0 +1,38 @@
+{
+  "description": "Alfred configuration",
+  "type": "object",
+  "required": [
+    "call_signs",
+    "input_id",
+    "output_id",
+    "global_interaction_ids",
+    "root_interaction_ids"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "call_signs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "input_id": {
+      "type": "string"
+    },
+    "output_id": {
+      "type": "string"
+    },
+    "root_interaction_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "global_interaction_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
