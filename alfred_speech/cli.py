@@ -13,11 +13,9 @@ def run():
                         help='The Alfred '
                              'configuration file.',
                         dest='configuration_file_path')
-    parser.add_argument('-i', '--input', nargs='?', help='The ID of the '
-                                                         'input to use. '
-                                                         'Overrides whatever is in the configuration file.',  # noqa: E501
+    parser.add_argument('-i', '--input', nargs='?', help='The ID of the input to use. Overrides whatever is in the configuration file.',  # noqa: E501
                         dest='input_id_override')
-    parser.add_argument('-o', '--output', nargs='?', help='The ID of the output to use Overrides whatever is in the configuration file.',  # noqa: E501
+    parser.add_argument('-o', '--output', nargs='?', help='The ID of the output to use. Overrides whatever is in the configuration file.',  # noqa: E501
                         dest='output_id_override')
 
     # Read the configuration file.
