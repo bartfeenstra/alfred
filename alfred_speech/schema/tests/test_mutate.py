@@ -269,3 +269,40 @@ class DictSchemaTest(SchemaTestCase):
             'int': 3,
             'any': ('Foo', [], 987654321),
         })
+
+
+class CoreMutatorTest(SchemaTestCase):
+    # @todo
+    # @todo This should also cover decorated schemas.
+    # @todo Do we want OOP decoration? That gives decorators absolute control,
+    # @todo but also requires them to extend all classes their children do.
+    # @todo We can also use duck typing and magic decoration, but then we'd lose our type checks everywhere.
+    # @todo Can we get a 'stack' per schema, so a list of all nested/decorated schemas?
+    # @todo Then we can loop through them and find the first schema to be of the specified type.
+    # @todo As with everything, such a stack depends on the data (RuntimeSchema)
+    # @todo
+    # @todo What if a stack contains AndLikeSchema? That stack entry would have to have multiple values.
+    # @todo The Mutator must be able to resolve those, even with decorators (in case AndLikeSchema would be the top one)
+    # @todo AndLikeSchema returns schemas in order of decreasing priority, so Mutator
+    # @todo can just check them in that order.
+    # @todo
+    # @todo
+    # @todo
+    # @todo
+    # @todo Also ensure that when mutating values anywhere but at the top of a schema,
+    # @todo the entire data structure is re-validated. It's easy on Mutators,
+    # @todo because they receive the top-level schema and data, and then selectors
+    # @todo to find the nested data. We can validate the entire data set from the top.
+    # @todo However, this is done AFTER the data has already been mutated...
+    # @todo Another common trick is to make schemas invoke their parent's validation.
+    # @todo As parents also need to call their childrens' validators, we would need
+    # @todo to find a way to prevent infinite loops. Drupal uses $notify?
+    # @todo The problem with this is that the parent data is not available.
+    # @todo
+    # @todo What if we simplify the validation rules and just decide we don't support this crazy nonsense for now?
+    # @todo For value objects it could be necessary, though. In that case, if there is a dependency between
+    # @todo values of container objects, perhaps they should not be mutable.
+    # @todo We want to introduce wizards/builders later anyway. They should solve this problem.
+    # @todo
+    # @todo
+    pass
