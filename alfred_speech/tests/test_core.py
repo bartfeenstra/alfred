@@ -5,7 +5,7 @@ from alfred_speech.contrib.interactions import EnvironmentAwareInteraction
 from alfred_speech.core import PluginRepository, Environment, \
     Plugin, \
     qualname, EnvironmentAwareFactory, Configuration, Interaction, Listener, \
-    State, get_class
+    State, get_class, sanitize_phrase
 
 
 class QualnameTest(TestCase):
@@ -30,6 +30,11 @@ class GetClassTest(TestCase):
     def testInvalidName(self):
         with self.assertRaises(ValueError):
             get_class('foo-bar')
+
+
+class SanitizePhraseTest(TestCase):
+    def test(self):
+        self.assertEqual(sanitize_phrase('Do you write HTML?  I do.\n\n-Unknown'), 'do you write html? i do. -unknown')
 
 
 class PluginRepositoryTest(TestCase):
@@ -181,12 +186,12 @@ class FooInteraction(EnvironmentAwareInteraction):
         return 'Foo'
 
     def knows(self, phrase: str):
-        if self.name == phrase:
+        if self.name.lower() == phrase:
             return State()
         return None
 
-    def enter(self, state: State):
-        pass
+    def enter(self, state):
+        return state
 
     def get_interactions(self) -> Iterable[Interaction]:
         return [self._environment.plugins.get(
@@ -199,9 +204,10 @@ class BarInteraction(EnvironmentAwareInteraction):
         return 'Bar'
 
     def knows(self, phrase: str):
-        if self.name == phrase:
+        if self.name.lower() == phrase:
             return State()
         return None
 
-    def enter(self, state: State):
+    def enter(self, state):
         self._environment.output.say(self.name)
+        return state

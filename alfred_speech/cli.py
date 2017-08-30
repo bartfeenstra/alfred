@@ -2,7 +2,8 @@ import argparse
 import json
 
 import os
-from alfred_speech.core import Environment, Listener, Configuration
+from alfred_speech.core import Environment, Listener, Configuration, \
+    LocaleConfiguration
 from jsonschema import validate, RefResolver
 
 
@@ -41,15 +42,21 @@ def run():
     output_id = parser.parse_args().output_id_override
     if output_id is None:
         output_id = configuration_file_contents['output_id']
-    locale = 'en-US'
+    locale_default = 'en-US'
+    locale_outputs = []
     if 'locale' in configuration_file_contents:
-        locale = configuration_file_contents['locale']
+        locale_contents = configuration_file_contents['locale']
+        if 'default' in locale_contents:
+            locale_default = locale_contents['default']
+        if 'outputs' in locale_contents:
+            locale_outputs = locale_contents['outputs']
+    locale_configuration = LocaleConfiguration(locale_default, locale_outputs)
     configuration = Configuration(input_id, output_id,
                                   configuration_file_contents['call_signs'],
                                   configuration_file_contents[
                                       'global_interaction_ids'],
                                   configuration_file_contents[
-                                      'root_interaction_ids'], locale)
+                                      'root_interaction_ids'], locale_configuration)
     environment = Environment(configuration)
     listener = Listener(environment, environment.plugins.get(input_id))
 

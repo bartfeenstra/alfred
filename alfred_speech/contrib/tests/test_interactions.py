@@ -1,10 +1,11 @@
 from typing import Iterable
 from unittest import TestCase
 
-from alfred_speech.contrib.interactions import CallSign, Help
+from alfred_speech.contrib.interactions import CallSign, Help, SwitchOutputLocale
 from alfred_speech.contrib.outputs import ListOutput
 from alfred_speech.core import State, Environment, Configuration, \
-    Interaction, qualname
+    Interaction, qualname, LocaleConfiguration
+from icu import Locale
 
 
 class InteractionTestCase(TestCase):
@@ -14,7 +15,7 @@ class InteractionTestCase(TestCase):
         self._configuration = Configuration(
             self._input_id,
             self._output_id, self._call_signs, self._global_interaction_ids,
-            self._root_interaction_ids, self._locale)
+            self._root_interaction_ids, LocaleConfiguration(self._locale_default, self._locale_outputs))
         self._environment = Environment(self._configuration)
 
     def _setUpConfiguration(self):
@@ -23,11 +24,12 @@ class InteractionTestCase(TestCase):
         self._call_signs = ['Hey', 'Alfred']
         self._global_interaction_ids = []
         self._root_interaction_ids = []
-        self._locale = 'en-US'
+        self._locale_default = Locale('en-US')
+        self._locale_outputs = []
 
     def assertKnows(self, state: State, speech: Iterable[str]):
         for phrase in speech:
-            self.assertEqual(self._sut.knows(phrase), state)
+            self.assertEqual(self._sut.knows(phrase), state, 'With phrase "%s".' % phrase)
 
 
 class CallSignTest(InteractionTestCase):
@@ -111,3 +113,35 @@ class HelpTest(InteractionTestCase):
         # Confirm no new interactions are provided, so we know we do not
         # need extensive test coverage.
         self.assertEqual(self._sut.get_interactions(), [])
+
+
+class SwitchOutputLocaleTest(InteractionTestCase):
+    def setUp(self):
+        super().setUp()
+        self._sut = SwitchOutputLocale(self._environment)
+
+    def _setUpConfiguration(self):
+        super()._setUpConfiguration()
+        self._locale_outputs = [Locale('de', 'DE'), Locale('nl'), Locale('en', 'IN'), Locale('en', 'US'), Locale('en', 'GB')]
+
+    def testKnows(self):
+        expected_state = SwitchOutputLocale.SwitchOutputLocaleState([Locale('en', 'IN'), Locale('en', 'US'), Locale('en', 'GB')])
+        speech = [
+            'Do you know English',
+            'Do you speak English?',
+            'Can we talk in English?',
+            'Can we speak English together?',
+            'Speak English',
+            'Speak English to me!',
+            'Do you know the English language?',
+            'do you speak the english language',
+        ]
+        self.assertKnows(expected_state, speech)
+
+    def testEnterWithUnknownLanguage(self):
+        state = SwitchOutputLocale.SwitchOutputLocaleState(
+            [Locale('en', 'IN'), Locale('en', 'US'), Locale('en', 'GB')])
+        self._sut.enter(state)
+
+    def testEnterWithMultipleLanguages(self):
+        self.skipTest()
