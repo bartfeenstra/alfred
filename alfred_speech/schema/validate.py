@@ -46,6 +46,22 @@ class Schema(with_metaclass(ContractsMeta)):
     def validate(self, value) -> Iterable:
         pass
 
+    @contract
+    def get_instance(self, value, schema_type: type):
+        """
+        Returns an instance of the specified schema type.
+        None is returned if the schema does not contain a schema of this type.
+        The schema itself, or any contained schema may be returned.
+
+        :type value: *
+        :rtype: alfred_speech.schema.validate.Schema|None
+        """
+        if Schema not in schema_type.__mro__:
+            raise ValueError()
+        if isinstance(self, schema_type):
+            return self
+        return None
+
 
 class AnySchema(Schema):
     def validate(self, value):

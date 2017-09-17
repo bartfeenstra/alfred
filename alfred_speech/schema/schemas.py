@@ -6,6 +6,7 @@ from contracts import contract
 
 from alfred_speech.schema.mutate import NonSettableValueError, \
     NonDeletableValueError, DictLikeSchema
+from alfred_speech.schema.traverse import RuntimeSchema, CompositeSchema
 from alfred_speech.schema.validate import Schema, SchemaValueError, \
     SchemaTypeError, SchemaAttributeError
 
@@ -63,17 +64,15 @@ class RangeSchema(Schema):
             yield SchemaValueError()
 
 
-class AndSchema(Schema):
+class AndSchema(CompositeSchema):
     def __init__(self, schemas: Iterable):
         self._schemas = schemas
 
-    def validate(self, value):
-        for schema in self._schemas:
-            for error in schema.validate(value):
-                yield error
+    def get_schemas(self):
+        return self._schemas
 
 
-class OrSchema(Schema):
+class OrSchema(RuntimeSchema):
     @contract
     def __init__(self, schemas: Iterable):
         self._schemas = schemas
@@ -87,6 +86,17 @@ class OrSchema(Schema):
             errors.extend(schema_errors)
         # @todo Consider returning a more useful error explaining the behavior of this OR schema.
         return errors
+
+    def get_schema(self, value):
+        schemas = []
+        for schema in self._schemas:
+            if not list(schema.validate(value)):
+                schemas.extend(schema)
+        if not schemas:
+            return None
+        if 0 == len(schemas):
+            return schemas[0]
+        return AndSchema(schemas)
 
 
 class EqualsSchema(Schema):

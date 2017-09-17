@@ -4,8 +4,7 @@ from typing import List, Iterator, Iterable, Dict
 from contracts import contract, with_metaclass, ContractsMeta
 
 from alfred_speech.schema import validate
-from alfred_speech.schema.validate import Schema, SchemaIndexError, \
-    SchemaKeyError, SchemaLookupError
+from alfred_speech.schema.validate import Schema, SchemaIndexError, SchemaKeyError, SchemaLookupError
 
 """
 This module provides traversable schemas. Custom schemas can implement the
@@ -27,7 +26,7 @@ class _ValueContainerSchema(Schema):
         try:
             self.assert_valid_selector(selector)
             return True
-        except Exception:
+        except SchemaLookupError:
             return False
 
     @abc.abstractmethod
@@ -65,18 +64,66 @@ class DictLikeSchema(_ValueContainerSchema):
         pass
 
 
-class AndLikeSchema(Schema):
+class RuntimeSchema(Schema):
+    """
+    A run-time self-resolving schema.
+
+    A run-time schema MUST NOT be the cause of a failed traversal. Traversers
+    MUST resolve the run-time schema and continue performing their action on
+    the returned schema.
+    """
+
+    @abc.abstractmethod
+    def get_schema(self, value):
+        """
+
+        :param value:
+        :return: Schema or None
+        """
+        pass
+
+    def validate(self, value):
+        return self.get_schema(value).validate(value)
+
+    def get_instance(self, value, schema_type):
+        instance = super().get_instance(value, schema_type)
+        if instance is not None:
+            return instance
+        runtime_schema = self.get_schema(value)
+        # Check inheritance directly for validation-only types.
+        if isinstance(runtime_schema, schema_type):
+            return runtime_schema
+        # Check inheritance for traversal types.
+        if isinstance(runtime_schema, Schema):
+            return runtime_schema.get_instance(value, schema_type)
+        return None
+
+
+class CompositeSchema(Schema):
     @abc.abstractmethod
     @contract
     def get_schemas(self) -> Iterable:
         pass
 
+    def validate(self, value):
+        for schema in self.get_schemas():
+            for error in schema.validate(value):
+                yield error
 
-class RuntimeSchema(Schema):
-    @abc.abstractmethod
-    @contract
-    def get_schema(self, value) -> Schema:
-        pass
+    def get_instance(self, value, schema_type):
+        instance = super().get_instance(value, schema_type)
+        if instance is not None:
+            return instance
+        for composite_schema in self.get_schemas():
+            # Check inheritance directly for validation-only types.
+            if isinstance(composite_schema, schema_type):
+                return composite_schema
+            # Check inheritance for traversal types.
+            if isinstance(composite_schema, Schema):
+                instance = composite_schema.get_instance(value, schema_type)
+                if instance is not None:
+                    return instance
+        return None
 
 
 class ListSchema(validate.ListSchema, ListLikeSchema):
@@ -184,7 +231,7 @@ class CoreTraverser(Traverser):
                 yield ancestor
             return
 
-        if isinstance(schema, AndLikeSchema):
+        if isinstance(schema, CompositeSchema):
             for possible_schema in schema.get_schemas():
                 try:
                     # Cast the iterator to a list, so we can keep the internals lazy, but

@@ -281,9 +281,9 @@ class CoreMutatorTest(SchemaTestCase):
     # @todo Then we can loop through them and find the first schema to be of the specified type.
     # @todo As with everything, such a stack depends on the data (RuntimeSchema)
     # @todo
-    # @todo What if a stack contains AndLikeSchema? That stack entry would have to have multiple values.
-    # @todo The Mutator must be able to resolve those, even with decorators (in case AndLikeSchema would be the top one)
-    # @todo AndLikeSchema returns schemas in order of decreasing priority, so Mutator
+    # @todo What if a stack contains CompositeSchema? That stack entry would have to have multiple values.
+    # @todo The Mutator must be able to resolve those, even with decorators (in case CompositeSchema would be the top one)
+    # @todo CompositeSchema returns schemas in order of decreasing priority, so Mutator
     # @todo can just check them in that order.
     # @todo
     # @todo

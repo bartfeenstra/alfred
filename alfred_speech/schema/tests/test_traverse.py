@@ -1,60 +1,80 @@
 from typing import List
 
-from alfred_speech.schema import ensure_list
 from alfred_speech.schema.tests import SchemaTestCase
 from alfred_speech.schema.traverse import CoreTraverser, SchemaKeyError, \
-    DictSchema, ListSchema, SchemaIndexError, RuntimeSchema, AndLikeSchema
-from alfred_speech.schema.validate import SchemaTypeError, TypeSchema, \
+    DictSchema, ListSchema, SchemaIndexError, RuntimeSchema, CompositeSchema
+from alfred_speech.schema.validate import TypeSchema, \
     SchemaLookupError, AnySchema
 
 
-class TypeSchemaTest(SchemaTestCase):
-    def setUp(self):
-        super().setUp()
+class CompositeSchemaTest(SchemaTestCase):
+    class CompositeSchemaDummy(CompositeSchema):
+        def __init__(self, schemas):
+            self._schemas = schemas
 
-        self._sut = TypeSchema(int)
+        def validate(self, value):
+            return []
 
-    def testValidateWithIntValue(self):
-        self.assertEquals(ensure_list(self._sut.validate(3)), [])
+        def get_schemas(self):
+            return self._schemas
 
-    def testValidateWithFloatValue(self):
-        self.assertContainsInstance(SchemaTypeError,
-                                    ensure_list(self._sut.validate(3.0)))
+    class RuntimeSchemaDummy(RuntimeSchema):
+        def __init__(self, schema):
+            self._schema = schema
 
-    def testValidateWithStringValue(self):
-        self.assertContainsInstance(SchemaTypeError,
-                                    ensure_list(self._sut.validate('3')))
+        def get_schema(self, value):
+            return self._schema
 
-    def testValidateWithIntListValue(self):
-        self.assertContainsInstance(SchemaTypeError,
-                                    ensure_list(self._sut.validate([3])))
+    def testGetInstanceWithSelf(self):
+        value = 7
+        sut = self.CompositeSchemaDummy([TypeSchema(int)])
+        self.assertEquals(sut.get_instance(value, self.CompositeSchemaDummy), sut)
 
-    def testIsValidWithIntValue(self):
-        self.assertTrue(self._sut.is_valid(3))
+    def testGetInstanceWithDecoratedSchemaInCorrectOrder(self):
+        value = 7
+        decorated_schema_one = TypeSchema(int)
+        decorated_schema_two = TypeSchema(int)
+        decorated_schema_three = TypeSchema(int)
+        sut = self.CompositeSchemaDummy(
+            [decorated_schema_one, decorated_schema_two,
+             decorated_schema_three])
+        self.assertEquals(sut.get_instance(value, TypeSchema), decorated_schema_one)
 
-    def testIsValidWithFloatValue(self):
-        self.assertFalse(self._sut.is_valid(3.0))
+    def testGetInstanceWithDecoratedSchemaShouldIterate(self):
+        value = 7
+        found_schema = AnySchema()
+        decorated_schema_one = TypeSchema(int)
+        decorated_schema_two = self.CompositeSchemaDummy([])
+        decorated_schema_three = self.CompositeSchemaDummy([found_schema])
+        sut = self.CompositeSchemaDummy(
+            [decorated_schema_one, decorated_schema_two,
+             decorated_schema_three])
+        self.assertEquals(sut.get_instance(value, AnySchema), found_schema)
 
-    def testIsValidWithStringValue(self):
-        self.assertFalse(self._sut.is_valid('3'))
+    def testGetInstanceWithRuntimeSchema(self):
+        value = 7
+        inner_schema = TypeSchema(int)
+        middle_schema = self.RuntimeSchemaDummy(inner_schema)
+        outer_schema = self.RuntimeSchemaDummy(middle_schema)
+        sut = self.CompositeSchemaDummy([outer_schema])
+        self.assertEquals(sut.get_instance(value, TypeSchema), inner_schema)
 
-    def testIsValidWithIntListValue(self):
-        self.assertFalse(self._sut.is_valid([3]))
+    def testGetInstanceWithNone(self):
+        value = 7
+        decorated_schema_one = TypeSchema(float)
+        decorated_schema_two = self.CompositeSchemaDummy(
+            [TypeSchema(str), TypeSchema(object)])
+        decorated_schema_three = self.RuntimeSchemaDummy(TypeSchema(int))
+        sut = self.CompositeSchemaDummy(
+            [decorated_schema_one, decorated_schema_two,
+             decorated_schema_three])
+        self.assertEquals(sut.get_instance(value, AnySchema), None)
 
-    def testAssertValidWithIntValue(self):
-        self._sut.assert_valid(3)
-
-    def testAssertValidWithFloatValue(self):
-        with self.assertRaises(SchemaTypeError):
-            self._sut.assert_valid(3.0)
-
-    def testAssertValidWithStringValue(self):
-        with self.assertRaises(SchemaTypeError):
-            self._sut.assert_valid('3')
-
-    def testAssertValidWithIntListValue(self):
-        with self.assertRaises(SchemaTypeError):
-            self._sut.assert_valid([3])
+    def testGetInstanceWithInvalidType(self):
+        value = 7
+        sut = self.CompositeSchemaDummy([])
+        with self.assertRaises(ValueError):
+            sut.get_instance(value, object)
 
 
 class ListSchemaTest(SchemaTestCase):
@@ -189,8 +209,8 @@ class CoreTraverserTest(SchemaTestCase):
                           (middle_schema, middle_data, ('foo',)),
                           (inner_schema, inner_data, ('foo', 'bar'))])
 
-    def testAncestorsWithAndLikeSchema(self):
-        class AndLikeSchemaDummy(AndLikeSchema):
+    def testAncestorsWithCompositeSchema(self):
+        class CompositeSchemaDummy(CompositeSchema):
             def __init__(self, schemas):
                 self._schemas = schemas
 
@@ -204,7 +224,7 @@ class CoreTraverserTest(SchemaTestCase):
         inner_data = 3
         middle_schema_one = TypeSchema(List)
         middle_schema_two = ListSchema(inner_schema)
-        schema = AndLikeSchemaDummy([middle_schema_one, middle_schema_two])
+        schema = CompositeSchemaDummy([middle_schema_one, middle_schema_two])
         data = [inner_data]
         sut = CoreTraverser()
         self.assertEqual(sut.ancestors(schema, data, (0,)),
