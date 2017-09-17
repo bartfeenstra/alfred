@@ -305,4 +305,11 @@ class CoreMutatorTest(SchemaTestCase):
     # @todo We want to introduce wizards/builders later anyway. They should solve this problem.
     # @todo
     # @todo
+
+
+    # @todo
+    # @todo With decorated schemas. If the topmost one must be used for validation
+    # @todo (e.g. Nullable) and another one for setting, how do we set through
+    # @todo the other one but validate through the top one?
+    # @todo
     pass

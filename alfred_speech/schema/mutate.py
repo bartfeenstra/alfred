@@ -2,7 +2,7 @@ import abc
 from copy import copy
 from typing import Dict, Iterable
 
-from contracts import contract
+from contracts import contract, with_metaclass, ContractsMeta
 
 from alfred_speech.schema import traverse
 from alfred_speech.schema.validate import SchemaTypeError, Schema, \
@@ -84,7 +84,7 @@ class ListLikeSchema(traverse.ListLikeSchema, MutableSchema):
 class DictLikeSchema(traverse.DictLikeSchema, MutableSchema):
     @abc.abstractmethod
     @contract
-    def set_value(self, data, delta, value) -> None:
+    def set_value(self, data, selector: str, value) -> None:
         """
         May raise NonSettableValueError.
         """
@@ -100,15 +100,7 @@ class DictLikeSchema(traverse.DictLikeSchema, MutableSchema):
 
     @abc.abstractmethod
     @contract
-    def delete_value(self, data, delta) -> None:
-        """
-        May raise NonDeletableValueError.
-        """
-        pass
-
-    @abc.abstractmethod
-    @contract
-    def delete_values(self, data) -> None:
+    def delete_value(self, data, selector: str) -> None:
         """
         May raise NonDeletableValueError.
         """
@@ -197,3 +189,8 @@ class DictSchema(traverse.DictSchema, DictLikeSchema):
         self.assert_valid(copied_data)
         for selector in self._item_schemas.keys():
             del data[selector]
+
+
+class Mutator(with_metaclass(ContractsMeta)):
+    def set_value(self):
+        pass
