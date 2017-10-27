@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "title": "Response schema",
+  "oneOf": [
+    {
+      "$ref": "#/definitions/success-response"
+    },
+    {
+      "$ref": "#/definitions/error-response"
+    }
+  ],
+  "definitions": {
+    "success-response": {
+      "type": "object",
+      "required": [
+        "data",
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "success"
+          ]
+        }
+      }
+    },
+    "error-response": {
+      "type": "object",
+      "required": [
+        "errors",
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "error"
+          ]
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/error"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "The machine-readable error code that identifies the type of error.",
+          "type": "string"
+        },
+        "description": {
+          "description": "The human-readable error description.",
+          "type": "string"
+        }
+      }
+    }
+  }
+}

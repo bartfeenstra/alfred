@@ -1,0 +1,8 @@
+[run]
+source =
+    alfred
+    alfred_http
+    alfred_manor
+
+omit =
+    */test*.py

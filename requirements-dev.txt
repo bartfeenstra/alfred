@@ -1,2 +1,2 @@
 -r ./requirements.txt
-flake8 ~= 3.3.0
+-r ./alfred/requirements-dev.txt
