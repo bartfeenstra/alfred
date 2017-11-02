@@ -20,8 +20,12 @@ class FlaskApp(Flask):
                 self._app.add_extension(extension_class)
         self._register_routes()
 
+    @property
+    def app(self):
+        return self._app
+
     def _register_routes(self):
-        endpoints = self._app.service('core', 'endpoint_repository')
+        endpoints = self._app.service('http', 'endpoints')
         route_endpoints = {}
         for endpoint in endpoints.get_endpoints():
             route_endpoints.setdefault(endpoint.path, [])

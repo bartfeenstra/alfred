@@ -5,9 +5,8 @@ from typing import Iterable, Optional, Dict
 from contracts import contract, ContractsMeta, with_metaclass
 from flask import Request as HttpRequest, Response as HttpResponse, url_for
 
-from alfred.app import AppAwareFactory
+from alfred.extension import AppAwareFactory
 from alfred_http.json import Json
-from alfred_http.schemas import SchemaRepository
 
 
 class Error(Exception):
@@ -59,8 +58,7 @@ class Response(Message):
 
 
 class ResponseMeta(MessageMeta):
-    @contract
-    def __init__(self, schemas: SchemaRepository):
+    def __init__(self, schemas):
         self._schemas = schemas
 
     @contract
@@ -192,3 +190,109 @@ class EndpointUrlBuilder:
         if parameters is None:
             parameters = {}
         return url_for(endpoint.path, **parameters)
+
+
+class StaticEndpointRepository(EndpointRepository):
+    def __init__(self, endpoints: Iterable):
+        self._endpoints = endpoints
+
+    def get_endpoint(self, endpoint_name: str):
+        return self._endpoints[endpoint_name]
+
+    def get_endpoints(self):
+        return self._endpoints
+
+
+class NestedEndpointRepository(EndpointRepository):
+    def __init__(self):
+        self._endpoints = None
+        self._endpoint_repositories = []
+
+    @contract
+    def add_endpoints(self, endpoints: EndpointRepository):
+        self._endpoint_repositories.append(endpoints)
+
+    def get_endpoint(self, endpoint_name: str):
+        if self._endpoints is None:
+            self._aggregate_endpoints()
+        return self._endpoints[endpoint_name]
+
+    def get_endpoints(self):
+        if self._endpoints is None:
+            self._aggregate_endpoints()
+        return self._endpoints
+
+    def _aggregate_endpoints(self):
+        self._endpoints = []
+        for endpoints in self._endpoint_repositories:
+            for endpoint in endpoints.get_endpoints():
+                self._endpoints.append(endpoint)
+
+
+class JsonSchemaResponse(SuccessResponse):
+    @contract
+    def __init__(self, schema: Json):
+        super().__init__()
+        self._has_data = True
+        self._data = schema.raw
+
+
+class JsonSchemaResponseMeta(SuccessResponseMeta):
+    def to_http_response(self, response):
+        assert isinstance(response, JsonSchemaResponse)
+        return super().to_http_response(response)
+
+    def get_json_schema(self):
+        return Json.from_data({
+            '$ref': 'http://json-schema.org/draft-04/schema#',
+            'description': 'A JSON Schema.',
+        })
+
+
+class AllMessagesJsonSchemaEndpoint(Endpoint):
+    NAME = 'schemas'
+
+    def __init__(self, schemas):
+        super().__init__(self.NAME, 'GET', '/about/json/schema',
+                         NonConfigurableRequestMeta(),
+                         JsonSchemaResponseMeta())
+        self._schemas = schemas
+
+    def handle(self, request):
+        return JsonSchemaResponse(self._schemas.get_for_all_messages())
+
+
+class EndpointRequest(Request):
+    @contract
+    def __init__(self, endpoint_name: str):
+        self._endpoint_name = endpoint_name
+
+    @property
+    @contract
+    def endpoint_name(self) -> str:
+        return self._endpoint_name
+
+
+class EndpointRequestMeta(RequestMeta):
+    """
+    Defines an endpoint-specific request.
+    """
+
+    def from_http_request(self, http_request, parameters):
+        return EndpointRequest(parameters['endpoint_name'])
+
+
+class ResponseJsonSchemaEndpoint(Endpoint):
+    NAME = 'schemas.response'
+
+    def __init__(self, schemas):
+        super().__init__(self.NAME, 'GET',
+                         '/about/json/schema/response/<endpoint_name>',
+                         EndpointRequestMeta(),
+                         JsonSchemaResponseMeta())
+        self._schemas = schemas
+
+    def handle(self, request):
+        assert isinstance(request, EndpointRequest)
+        return JsonSchemaResponse(
+            self._schemas.get_for_response(request.endpoint_name))

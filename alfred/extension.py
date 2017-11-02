@@ -1,5 +1,59 @@
-from alfred.app import Extension
-from alfred.factory import ClassFactory
+import abc
+
+from alfred import qualname
+from alfred.app import Extension, App, FactoryError, Factory
+
+
+class AppAwareFactory:
+    """
+    Allows classes to instantiate themselves using the application.
+    """
+
+    @classmethod
+    @abc.abstractmethod
+    def from_app(cls, app: App):
+        """
+        Returns a new instance using the application.
+        :param app: App
+        :return: cls
+        """
+        pass
+
+
+class AppAwareCallableFactory(Factory):
+    def __init__(self, app: App):
+        super().__init__()
+        self._app = app
+
+    def new(self, spec):
+        if not callable(spec):
+            raise FactoryError(
+                'Specification must be a callable, but is a %s.' % type(spec))
+        try:
+            return spec(self._app)
+        except Exception as e:
+            raise FactoryError(
+                'Fix the following error that occurs when %s() is called: %s' %
+                (spec.__name__, e))
+        pass
+
+
+class AppAwareClassFactory(Factory):
+    def __init__(self, app: App):
+        super().__init__()
+        self._app = app
+
+    def new(self, spec):
+        if not isinstance(spec, type):
+            raise FactoryError(
+                'Specification must be a class, but is a %s.' % type(spec))
+        try:
+            return spec(self._app)
+        except Exception as e:
+            raise FactoryError(
+                'Fix the following error that occurs in %s.__init__(): %s' %
+                (qualname(spec), e))
+        pass
 
 
 class CoreExtension(Extension):
@@ -7,10 +61,10 @@ class CoreExtension(Extension):
     def name():
         return 'core'
 
-    def _class_factory(self) -> ClassFactory:
-        return ClassFactory(self._app)
+    @Extension.service(tags=('factory',))
+    def _callable_factory(self):
+        return AppAwareCallableFactory(self._app)
 
-    def get_services(self):
-        return {
-            'factory': self._class_factory,
-        }
+    @Extension.service(tags=('factory',))
+    def _class_factory(self):
+        return AppAwareClassFactory(self._app)

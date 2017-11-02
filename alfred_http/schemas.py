@@ -2,7 +2,7 @@ from typing import Optional
 
 from contracts import contract
 
-from alfred import RESOURCE_PATH
+from alfred_http import RESOURCE_PATH
 from alfred_http.endpoints import EndpointRepository, EndpointUrlBuilder
 from alfred_http.json import Json
 

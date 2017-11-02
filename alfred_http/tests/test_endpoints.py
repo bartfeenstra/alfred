@@ -1,18 +1,20 @@
 from typing import Optional, Dict
 from unittest import TestCase
 
-from alfred.extension import CoreExtension, ResponseJsonSchemaEndpoint
-from alfred_http.flask.app import App
+from alfred.extension import CoreExtension
+from alfred_http.endpoints import ResponseJsonSchemaEndpoint
+from alfred_http.flask.app import FlaskApp
 from alfred_http.json import Json
 
 
 class EndpointTestCase(TestCase):
     def setUp(self):
-        self._app = App()
-        self._app.config.update(SERVER_NAME='localhost')
-        self._app_context = self._app.app_context()
+        self._flask_app = FlaskApp()
+        self._flask_app.config.update(SERVER_NAME='localhost')
+        self._app_context = self._flask_app.app_context()
         self._app_context.push()
-        self._app_client = self._app.test_client()
+        self._app_client = self._flask_app.test_client()
+        self._app = self._flask_app.app
 
     def tearDown(self):
         self._app_context.pop()
