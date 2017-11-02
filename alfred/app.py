@@ -1,22 +1,10 @@
 import abc
-import inspect
 import traceback
-from typing import Iterable, Optional, Callable, List
+from typing import Iterable, Optional, Callable
 
-import sys
 from contracts import contract, ContractsMeta, with_metaclass
 
-from alfred import qualname
-
-
-def indent(string: str, indentation='   '):
-    """
-    Indents each line of a multi-line string.
-    :param string:
-    :param indentation:
-    :return:
-    """
-    return "\n".join(map(lambda line: '%s%s' % (indentation, line), string.split("\n")))
+from alfred import indent, qualname
 
 
 class LazyValue:
@@ -117,7 +105,8 @@ class MultipleFactories(Factory):
                 requirements.append(
                     indent(traceback.format_exc()))
         message = [
-            'Could not use specification "%s". One of the following requirements must be met:' % str(  # noqa: E501
+            'Could not use specification "%s". One of the following requirements must be met:' % str(
+                # noqa: E501
                 spec)]
 
         requirements = set(requirements)
@@ -323,7 +312,8 @@ class App:
             trace = []
             entry = 1
             for frame_extension_name, frame_service_name in self._service_stack:
-                trace.append('%d ) Service %s for extension %s.' % (entry, frame_service_name, frame_extension_name))
+                trace.append('%d ) Service %s for extension %s.' % (
+                    entry, frame_service_name, frame_extension_name))
                 entry += 1
             raise RecursionError(
                 'Infinite loop when requesting service %s for extension %s twice. Stack trace, with the original service request first:\n%s.' % (
