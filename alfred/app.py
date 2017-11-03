@@ -316,7 +316,7 @@ class App:
                     entry, frame_service_name, frame_extension_name))
                 entry += 1
             raise RecursionError(
-                'Infinite loop when requesting service %s for extension %s twice. Stack trace, with the original service request first:\n%s.' % (
+                'Infinite loop when requesting service %s for extension %s twice. Stack trace, with the original service request first:\n%s' % (
                     service_name, extension_name,
                     indent('\n'.join(trace))))
 

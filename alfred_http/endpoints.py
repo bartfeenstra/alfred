@@ -5,6 +5,7 @@ from typing import Iterable, Optional, Dict
 from contracts import contract, ContractsMeta, with_metaclass
 from flask import Request as HttpRequest, Response as HttpResponse, url_for
 
+from alfred.app import Factory
 from alfred.extension import AppAwareFactory
 from alfred_http.json import Json
 
@@ -57,9 +58,13 @@ class Response(Message):
     pass
 
 
-class ResponseMeta(MessageMeta):
+class ResponseMeta(MessageMeta, AppAwareFactory):
     def __init__(self, schemas):
         self._schemas = schemas
+
+    @classmethod
+    def from_app(cls, app):
+        return cls(app.service('http', 'schemas'))
 
     @contract
     def to_http_response(self, response: Response) -> HttpResponse:
@@ -132,16 +137,18 @@ class Endpoint(with_metaclass(ContractsMeta)):
     _allowed_methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
 
     @contract
-    def __init__(self, name: str, method: str, path: str,
-                 request_meta: RequestMeta,
-                 response_meta: ResponseMeta):
+    def __init__(self, factory: Factory, name: str, method: str, path: str,
+                 request_meta_class: type,
+                 response_meta_class: type):
+        assert issubclass(request_meta_class, RequestMeta)
+        assert issubclass(response_meta_class, ResponseMeta)
         self._name = name
         method = method.upper()
         assert method in self._allowed_methods
         self._method = method
         self._path = path
-        self._request_meta = request_meta
-        self._response_meta = response_meta
+        self._request_meta = factory.defer(request_meta_class)
+        self._response_meta = factory.defer(response_meta_class)
 
     @property
     def name(self) -> str:
@@ -192,15 +199,28 @@ class EndpointUrlBuilder:
         return url_for(endpoint.path, **parameters)
 
 
-class StaticEndpointRepository(EndpointRepository):
-    def __init__(self, endpoints: Iterable):
-        self._endpoints = endpoints
+class EndpointFactoryRepository(EndpointRepository):
+    @contract
+    def __init__(self, factory: Factory, endpoint_classes: Iterable):
+        self._factory = factory
+        self._endpoint_classes = endpoint_classes
+        self._endpoints = None
 
     def get_endpoint(self, endpoint_name: str):
+        if self._endpoints is None:
+            self._aggregate_endpoints()
         return self._endpoints[endpoint_name]
 
     def get_endpoints(self):
-        return self._endpoints
+        if self._endpoints is None:
+            self._aggregate_endpoints()
+        return self._endpoints.values()
+
+    def _aggregate_endpoints(self):
+        self._endpoints = {}
+        for endpoint_class in self._endpoint_classes:
+            endpoint = self._factory.new(endpoint_class)
+            self._endpoints[endpoint.name] = endpoint
 
 
 class NestedEndpointRepository(EndpointRepository):
@@ -220,13 +240,13 @@ class NestedEndpointRepository(EndpointRepository):
     def get_endpoints(self):
         if self._endpoints is None:
             self._aggregate_endpoints()
-        return self._endpoints
+        return self._endpoints.values()
 
     def _aggregate_endpoints(self):
-        self._endpoints = []
+        self._endpoints = {}
         for endpoints in self._endpoint_repositories:
             for endpoint in endpoints.get_endpoints():
-                self._endpoints.append(endpoint)
+                self._endpoints[endpoint.name] = endpoint
 
 
 class JsonSchemaResponse(SuccessResponse):
@@ -249,14 +269,18 @@ class JsonSchemaResponseMeta(SuccessResponseMeta):
         })
 
 
-class AllMessagesJsonSchemaEndpoint(Endpoint):
+class AllMessagesJsonSchemaEndpoint(Endpoint, AppAwareFactory):
     NAME = 'schemas'
 
-    def __init__(self, schemas):
-        super().__init__(self.NAME, 'GET', '/about/json/schema',
-                         NonConfigurableRequestMeta(),
-                         JsonSchemaResponseMeta())
+    def __init__(self, factory, schemas):
+        super().__init__(factory, self.NAME, 'GET', '/about/json/schema',
+                         NonConfigurableRequestMeta,
+                         JsonSchemaResponseMeta)
         self._schemas = schemas
+
+    @classmethod
+    def from_app(cls, app):
+        return cls(app.factory, app.service('http', 'schemas'))
 
     def handle(self, request):
         return JsonSchemaResponse(self._schemas.get_for_all_messages())
@@ -282,15 +306,20 @@ class EndpointRequestMeta(RequestMeta):
         return EndpointRequest(parameters['endpoint_name'])
 
 
-class ResponseJsonSchemaEndpoint(Endpoint):
+class ResponseJsonSchemaEndpoint(Endpoint, AppAwareFactory):
     NAME = 'schemas.response'
 
-    def __init__(self, schemas):
-        super().__init__(self.NAME, 'GET',
+    @contract
+    def __init__(self, factory: Factory, schemas):
+        super().__init__(factory, self.NAME, 'GET',
                          '/about/json/schema/response/<endpoint_name>',
-                         EndpointRequestMeta(),
-                         JsonSchemaResponseMeta())
+                         EndpointRequestMeta,
+                         JsonSchemaResponseMeta)
         self._schemas = schemas
+
+    @classmethod
+    def from_app(cls, app):
+        return cls(app.factory, app.service('http', 'schemas'))
 
     def handle(self, request):
         assert isinstance(request, EndpointRequest)

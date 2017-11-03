@@ -6,7 +6,7 @@ from contracts import contract
 from alfred import qualname
 from alfred.app import App, FactoryError
 from alfred.extension import AppAwareCallableFactory, AppAwareClassFactory, \
-    CoreExtension
+    CoreExtension, AppAwareFactory
 
 
 class AppAwareCallableFactoryTest(TestCase):
@@ -34,10 +34,14 @@ class AppAwareClassFactoryTest(TestCase):
     class AppUnaware:
         pass
 
-    class AppAware:
+    class AppAware(AppAwareFactory):
         @contract
         def __init__(self, app: App):
             pass
+
+        @classmethod
+        def from_app(cls, app):
+            return cls(app)
 
     @patch(qualname(App), spec=App)
     def test_success(self, app: App):

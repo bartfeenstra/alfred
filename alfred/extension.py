@@ -48,10 +48,10 @@ class AppAwareClassFactory(Factory):
             raise FactoryError(
                 'Specification must be a class, but is a %s.' % type(spec))
         try:
-            return spec(self._app)
+            return spec.from_app(self._app)
         except Exception as e:
             raise FactoryError(
-                'Fix the following error that occurs in %s.__init__(): %s' %
+                'Fix the following error that occurs in %s.from_app(): %s' %
                 (qualname(spec), e))
         pass
 

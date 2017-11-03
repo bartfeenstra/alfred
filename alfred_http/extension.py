@@ -4,8 +4,8 @@ from alfred.app import Extension
 from alfred.extension import CoreExtension
 from alfred_http.endpoints import EndpointUrlBuilder, \
     AllMessagesJsonSchemaEndpoint, \
-    ResponseJsonSchemaEndpoint, StaticEndpointRepository, \
-    NestedEndpointRepository
+    ResponseJsonSchemaEndpoint, NestedEndpointRepository, \
+    EndpointFactoryRepository
 from alfred_http.json import Validator
 from alfred_http.schemas import SchemaRepository
 
@@ -28,17 +28,15 @@ class HttpExtension(Extension):
 
     @Extension.service(tags=('http_endpoints',))
     def _endpoints_http(self):
-        endpoints = [
-            AllMessagesJsonSchemaEndpoint(
-                self._app.service('http', 'schemas')),
-            ResponseJsonSchemaEndpoint(self._app.service('http', 'schemas')),
-        ]
-        return StaticEndpointRepository(endpoints)
+        return EndpointFactoryRepository(self._app.factory, [
+            AllMessagesJsonSchemaEndpoint,
+            ResponseJsonSchemaEndpoint,
+        ])
 
     @Extension.service()
     def _schemas(self) -> SchemaRepository:
         return SchemaRepository(self._app.service('http', 'endpoints'),
-                                self._app.service('core', 'urls'))
+                                self._app.service('http', 'urls'))
 
     @Extension.service()
     def _urls(self) -> EndpointUrlBuilder:
