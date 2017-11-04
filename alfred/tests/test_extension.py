@@ -73,4 +73,3 @@ class CoreExtensionTest(TestCase):
         self.assertEquals(instance, 'app_aware')
         instance = app.factory.new(self.AppAware)
         self.assertIsInstance(instance, self.AppAware)
-

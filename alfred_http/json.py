@@ -1,7 +1,6 @@
 import json
 from typing import Optional
 
-from contracts import contract
 from jsonschema import RefResolver, validate
 
 
@@ -27,8 +26,9 @@ class Json:
 
 
 class Validator:
-    def validate(self, subject: Json, schema: Optional[Json]=None):
-        reference_resolver = RefResolver('http://localhost', 'http://localhost')
+    def validate(self, subject: Json, schema: Optional[Json] = None):
+        reference_resolver = RefResolver(
+            'http://localhost', 'http://localhost')
         data = subject.data
         if schema is None:
             message = 'The JSON must be an object with a "schema" key.'

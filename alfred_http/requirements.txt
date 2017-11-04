@@ -1,2 +1,3 @@
 flask ~= 0.12.2
 jsonschema ~= 2.6
+pycontracts ~= 1.8.0

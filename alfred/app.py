@@ -89,8 +89,8 @@ class MultipleFactories(Factory):
         self._loop = False
 
     @contract
-    def add_factory(self, factory: Factory):
-        self._factories.append(factory)
+    def set_factories(self, factories: Iterable):
+        self._factories = factories
 
     def new(self, spec):
         if not self._factories:
@@ -167,22 +167,24 @@ class Extension(with_metaclass(ContractsMeta)):
         """
 
         def __init__(self, name: Optional[str] = None,
-                     tags: Optional[Iterable[str]] = None):
+                     tags: Optional[Iterable[str]] = None, weight: int=0):
             self._name = name
             self._tags = tags if tags is not None else []
             self._factory = None
+            self._weight = weight
 
         def __call__(self, factory):
             self._factory = factory
             return self
 
         def get_definition(self, instance):
+            # Wrap the factory in another, so we can apply the instance.
             def factory(*args, **kwargs):
                 return self._factory(instance, *args, **kwargs)
 
             name = self._name if self._name is not None else self._factory.__name__.strip(
                 '_')
-            return ServiceDefinition(name, factory, self._tags)
+            return ServiceDefinition(name, factory, self._tags, weight=self._weight)
 
     def __init__(self, app: 'App'):
         self._app = app
@@ -228,6 +230,7 @@ class App:
         Optional core services are added through CoreExtension.
         :return:
         """
+
         callable_factory_definition = ServiceDefinition('factory.callable',
                                                         lambda: CallableFactory(),
                                                         ('factory',))
@@ -259,8 +262,7 @@ class App:
     @contract
     def _multiple_factory_factory(self) -> Factory:
         factory = MultipleFactories()
-        for tagged_factory in self.services(tag='factory'):
-            factory.add_factory(tagged_factory)
+        factory.set_factories(self.services(tag='factory'))
         return factory
 
     @contract
@@ -278,13 +280,6 @@ class App:
         self._services.setdefault(extension_name, {})
         self._services[extension_name][
             service_definition.name] = service
-
-        # @todo This is a workaround to make the factory work. It should
-        #  eventually be replaced by an event dispatcher and events for adding
-        #  (and removing) extensions.
-        if 'factory' in service_definition.tags:
-            self.service('core', 'factory.multiple').add_factory(
-                self.service(extension_name, service_definition.name))
 
     @property
     @contract
@@ -304,6 +299,12 @@ class App:
         self._services.setdefault(extension.name, {})
         for service_definition in extension.service_definitions:
             self._add_service(extension.name(), service_definition)
+
+        # @todo This is a workaround to make the factory work. It should
+        #  eventually be replaced by an event dispatcher and events for adding
+        #  (and removing) extensions.
+        self.service('core', 'factory.multiple').set_factories(
+            self.services(tag='factory'))
 
     @contract
     def service(self, extension_name: str, service_name: str):

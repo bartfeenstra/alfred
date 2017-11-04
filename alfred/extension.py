@@ -65,6 +65,6 @@ class CoreExtension(Extension):
     def _callable_factory(self):
         return AppAwareCallableFactory(self._app)
 
-    @Extension.service(tags=('factory',))
+    @Extension.service(tags=('factory',), weight=-999)
     def _class_factory(self):
         return AppAwareClassFactory(self._app)

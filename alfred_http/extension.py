@@ -16,7 +16,7 @@ class HttpExtension(Extension):
         return 'http'
 
     @staticmethod
-    def dependencies() -> Iterable:
+    def dependencies():
         return [CoreExtension]
 
     @Extension.service()
@@ -34,12 +34,12 @@ class HttpExtension(Extension):
         ])
 
     @Extension.service()
-    def _schemas(self) -> SchemaRepository:
+    def _schemas(self):
         return SchemaRepository(self._app.service('http', 'endpoints'),
                                 self._app.service('http', 'urls'))
 
     @Extension.service()
-    def _urls(self) -> EndpointUrlBuilder:
+    def _urls(self):
         return EndpointUrlBuilder(self._app.service('http', 'endpoints'))
 
     @Extension.service()

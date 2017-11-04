@@ -64,6 +64,8 @@ class ResponseMeta(MessageMeta, AppAwareFactory):
 
     @classmethod
     def from_app(cls, app):
+        print()
+        print(app.service('http', 'schemas'))
         return cls(app.service('http', 'schemas'))
 
     @contract
@@ -71,9 +73,12 @@ class ResponseMeta(MessageMeta, AppAwareFactory):
         http_response = HttpResponse(content_type='application/vnd.api+json')
         if self._has_body(response):
             body = self._get_body(response)
-            # @todo  PROBLEM:  We're rendering the response, but to get the schema, we'll need the ENDPOINT name... Requests and responses can be used by multiple endpoints...
-            body['$schema'] = self._schemas.get_url_for_response(
-                'schemas.response')
+            print(response)
+            assert body is None or isinstance(body, Dict)
+            if body is not None:
+                # @todo  PROBLEM:  We're rendering the response, but to get the schema, we'll need the ENDPOINT name... Requests and responses can be used by multiple endpoints...
+                body['$schema'] = self._schemas.get_url_for_response(
+                    'schemas.response')
             http_response.set_data(json.dumps(body))
         return http_response
 
@@ -165,12 +170,14 @@ class Endpoint(with_metaclass(ContractsMeta)):
     @property
     @contract
     def request_meta(self) -> RequestMeta:
-        return self._request_meta
+        # @todo Find out why LazyValue.__get__() does not work here.
+        return self._request_meta.value
 
     @property
     @contract
     def response_meta(self) -> ResponseMeta:
-        return self._response_meta
+        # @todo Find out why LazyValue.__get__() does not work here.
+        return self._response_meta.value
 
     @contract
     def handle(self, request: Request) -> Response:
@@ -254,7 +261,7 @@ class JsonSchemaResponse(SuccessResponse):
     def __init__(self, schema: Json):
         super().__init__()
         self._has_data = True
-        self._data = schema.raw
+        self._data = schema.data
 
 
 class JsonSchemaResponseMeta(SuccessResponseMeta):

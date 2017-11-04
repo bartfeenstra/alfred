@@ -62,15 +62,19 @@ class MultipleFactoriesTest(TestCase):
 
     def test_success_with_first_factory(self):
         sut = MultipleFactories()
-        sut.add_factory(CallableFactory())
-        sut.add_factory(ClassFactory())
+        sut.set_factories((
+            CallableFactory(),
+            ClassFactory(),
+        ))
         instance = sut.new(self._without_parameters)
         self.assertEqual(instance, 'without')
 
     def test_success_with_last_factory(self):
         sut = MultipleFactories()
-        sut.add_factory(CallableFactory())
-        sut.add_factory(ClassFactory())
+        sut.set_factories((
+            CallableFactory(),
+            ClassFactory(),
+        ))
         instance = sut.new(self.WithoutConstructorParameters)
         self.assertIsInstance(instance, self.WithoutConstructorParameters)
 
