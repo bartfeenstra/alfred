@@ -34,7 +34,7 @@ class AppAwareCallableFactory(Factory):
         except Exception as e:
             raise FactoryError(
                 'Fix the following error that occurs when %s() is called: %s' %
-                (spec.__name__, e))
+                (spec, e))
         pass
 
 

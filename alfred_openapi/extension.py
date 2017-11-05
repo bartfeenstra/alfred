@@ -1,6 +1,7 @@
 from alfred.app import Extension
 from alfred_http.endpoints import EndpointFactoryRepository, OpenApiEndpoint
 from alfred_http.extension import HttpExtension
+from alfred_openapi.openapi import OpenApi
 
 
 class OpenApiExtension(Extension):

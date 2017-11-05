@@ -3,7 +3,7 @@ from contracts import contract
 
 @contract
 def qualname(cls) -> str:
-    return '%s.%s' % (cls.__module__,  cls.__qualname__)
+    return '%s.%s' % (cls.__module__, cls.__qualname__)
 
 
 @contract

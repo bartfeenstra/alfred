@@ -285,8 +285,10 @@ class NestedEndpointRepository(EndpointRepository):
         self._endpoint_repositories = []
 
     @contract
-    def add_endpoints(self, endpoints: EndpointRepository):
-        self._endpoint_repositories.append(endpoints)
+    def add_endpoints(self, repositories: EndpointRepository):
+        # Re-set the aggregated endpoints.
+        self._endpoints = None
+        self._endpoint_repositories.append(repositories)
 
     def get_endpoint(self, endpoint_name: str):
         if self._endpoints is None:
@@ -304,6 +306,6 @@ class NestedEndpointRepository(EndpointRepository):
 
     def _aggregate_endpoints(self):
         self._endpoints = []
-        for endpoints in self._endpoint_repositories:
-            for endpoint in endpoints.get_endpoints():
+        for repository in self._endpoint_repositories:
+            for endpoint in repository.get_endpoints():
                 self._endpoints.append(endpoint)

@@ -115,6 +115,12 @@ class NestedEndpointRepositoryTest(TestCase):
         sut = NestedEndpointRepository()
         self.assertIsNone(sut.get_endpoint('qux'))
 
+        # Add nested repositories, and assert the endpoint is available now.
+        repositories, endpoints = self.mock_endpoints()
+        for repository in repositories:
+            sut.add_endpoints(repository)
+        self.assertEquals(sut.get_endpoint('bar'), endpoints[2])
+
     def testGetEndpointsWithEndpoints(self):
         repositories, endpoints = self.mock_endpoints()
         sut = NestedEndpointRepository()
@@ -126,3 +132,10 @@ class NestedEndpointRepositoryTest(TestCase):
     def testGetEndpointsWithoutEndpoints(self):
         sut = NestedEndpointRepository()
         self.assertSequenceEqual(sut.get_endpoints(), [])
+
+        # Add nested repositories, and assert the endpoints are available now.
+        repositories, endpoints = self.mock_endpoints()
+        for repository in repositories:
+            sut.add_endpoints(repository)
+        self.assertSequenceEqual(sut.get_endpoints(),
+                                 endpoints)

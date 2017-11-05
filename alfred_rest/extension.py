@@ -1,9 +1,12 @@
 from alfred.app import Extension
 from alfred.extension import CoreExtension
-from alfred_http.endpoints import EndpointFactoryRepository, \
-    ResponseJsonSchemaEndpoint, AllMessagesJsonSchemaEndpoint
+from alfred_http.endpoints import EndpointFactoryRepository
 from alfred_http.extension import HttpExtension
 from alfred_openapi.extension import OpenApiExtension
+from alfred_rest.endpoints import AllMessagesJsonSchemaEndpoint, \
+    ResponseJsonSchemaEndpoint
+from alfred_rest.json import Validator
+from alfred_rest.schemas import SchemaRepository
 
 
 class RestExtension(Extension):

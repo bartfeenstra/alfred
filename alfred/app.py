@@ -65,7 +65,7 @@ class CallableFactory(Factory):
         except Exception:
             raise FactoryError(
                 'Fix the following error that occurs when %s() is called:\n%s' %
-                (spec.__name__, indent(traceback.format_exc())))
+                (spec, indent(traceback.format_exc())))
         pass
 
 
@@ -162,6 +162,25 @@ class Extension(with_metaclass(ContractsMeta)):
     """
 
     class service:
+        class NamedServiceFactory:
+            """
+            Wraps a decorated service factory
+            """
+
+            def __init__(self, factory, instance):
+                self._factory = factory
+                self._instance = instance
+
+            def __call__(self, *args, **kwargs):
+                return self._factory(self._instance, *args, **kwargs)
+
+            def __str__(self):
+                """
+                As __call__ just invokes the wrapped factory, name ourselves
+                after it for easy debugging.
+                :return:
+                """
+                return str(self._factory)
         """
         Decorates a method and marks it as a service definition.
         :return:
@@ -179,13 +198,14 @@ class Extension(with_metaclass(ContractsMeta)):
             return self
 
         def get_definition(self, instance):
-            # Wrap the factory in another, so we can apply the instance.
-            def factory(*args, **kwargs):
-                return self._factory(instance, *args, **kwargs)
+            """
 
+            :param instance: The instance the factory method must be called on.
+            :return:
+            """
             name = self._name if self._name is not None else self._factory.__name__.strip(
                 '_')
-            return ServiceDefinition(name, factory, self._tags, weight=self._weight)
+            return ServiceDefinition(name, self.NamedServiceFactory(self._factory, instance), self._tags, weight=self._weight)
 
     def __init__(self, app: 'App'):
         self._app = app
