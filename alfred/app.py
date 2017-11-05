@@ -100,7 +100,8 @@ class MultipleFactories(Factory):
         requirements = []
         for factory in self._factories:
             try:
-                return factory.new(spec)
+                instance = factory.new(spec)
+                return instance
             except FactoryError:
                 requirements.append(
                     indent(traceback.format_exc()))
@@ -190,11 +191,6 @@ class Extension(with_metaclass(ContractsMeta)):
         self._app = app
         self._service_definitions = []
 
-    @staticmethod
-    @abc.abstractmethod
-    def name() -> str:
-        pass
-
     @classmethod
     def from_app(cls, app):
         """
@@ -203,6 +199,11 @@ class Extension(with_metaclass(ContractsMeta)):
         :return:
         """
         return cls(app)
+
+    @staticmethod
+    @abc.abstractmethod
+    def name() -> str:
+        pass
 
     @staticmethod
     def dependencies() -> Iterable:

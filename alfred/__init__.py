@@ -3,8 +3,7 @@ from contracts import contract
 
 @contract
 def qualname(cls) -> str:
-    separator = ':' if '.' in cls.__qualname__ else '.'
-    return cls.__module__ + separator + cls.__qualname__
+    return '%s.%s' % (cls.__module__,  cls.__qualname__)
 
 
 @contract

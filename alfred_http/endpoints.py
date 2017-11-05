@@ -1,13 +1,14 @@
+import abc
 import json
 from copy import copy
 from typing import Iterable, Optional, Dict
 
 from contracts import contract, ContractsMeta, with_metaclass
 from flask import Request as HttpRequest, Response as HttpResponse, url_for
+from marshmallow import Schema
 
 from alfred.app import Factory
 from alfred.extension import AppAwareFactory
-from alfred_http.json import Json
 
 
 class Error(Exception):
@@ -22,8 +23,13 @@ class Error(Exception):
 
 class MessageMeta(AppAwareFactory,
                   with_metaclass(ContractsMeta)):
-    def get_json_schema(self) -> Optional[Json]:
+    def get_payload_schema(self) -> Optional[Schema]:
         return None
+
+    @abc.abstractmethod
+    @contract
+    def get_content_type(self) -> str:
+        pass
 
 
 class Message(with_metaclass(ContractsMeta)):
@@ -34,10 +40,61 @@ class Request(Message):
     pass
 
 
+# @todo RequestMeta should be much more important than it really is.
+# @todo Endpoints are just glue between RequestMeta and ResponseMeta
+# @todo So RequestMeta should define what it needs, such as HTTP method,
+# @todo parameters (required in path, and optional in query). Because RequestMeta
+# @todo and ResponseMeta can be reused across endpoints, things like the full
+# @todo path remain endpoint-specific.
+# @todo RequestMeta
+# @todo - NEEDS THE ENDPOINT (but only for getting its OWN schema anyway...)
+# @todo - HTTP method
+# @todo - Required parameters + schemas
+# @todo - Optional parameters + schemas
+# @todo - Request body schema
+# @todo - Request content type
+# @todo
+# @todo ResponseMeta
+# @todo - NEEDS THE ENDPOINT (but only for getting its OWN schema anyway...)
+# @todo - Response body schema
+# @todo - Response content types
+# @todo   We must allow multiple here, because some systems might want responses with or without JSON-LD.
+# @todo
+# @todo Endpoint
+# @todo - EXPOSES MESSAGE META
+# @todo - Takes always/usually a single request type, but can return multiple
+# @todo - Full path (must include required RequestMeta parameters)
+# @todo
+# @todo UNSOLVED
+# @todo - What if we want multiple 'endpoints' behind the same URL and method
+# @todo   but that accept different, non-overlapping content types? LET'S KEEP THIS FOR THE FUTURE
+# @todo
+# @todo
+# @todo
+# @todo
+# @todo
 class RequestMeta(MessageMeta):
+    _allowed_methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
+
+    @contract
+    def __init__(self, method: str):
+        method = method.upper()
+        assert method in self._allowed_methods
+        self._method = method
+
+    @abc.abstractmethod
     @contract
     def from_http_request(self, http_request: HttpRequest,
                           parameters: Dict) -> Request:
+        pass
+
+    @property
+    def method(self) -> str:
+        return self._method
+
+    @abc.abstractmethod
+    @contract
+    def get_parameter_schemas(self) -> Schema:
         pass
 
 
@@ -64,8 +121,6 @@ class ResponseMeta(MessageMeta, AppAwareFactory):
 
     @classmethod
     def from_app(cls, app):
-        print()
-        print(app.service('http', 'schemas'))
         return cls(app.service('http', 'schemas'))
 
     @contract
@@ -73,7 +128,6 @@ class ResponseMeta(MessageMeta, AppAwareFactory):
         http_response = HttpResponse(content_type='application/vnd.api+json')
         if self._has_body(response):
             body = self._get_body(response)
-            print(response)
             assert body is None or isinstance(body, Dict)
             if body is not None:
                 # @todo  PROBLEM:  We're rendering the response, but to get the schema, we'll need the ENDPOINT name... Requests and responses can be used by multiple endpoints...
@@ -115,7 +169,7 @@ class SuccessResponseMeta(ResponseMeta):
     @contract
     def _has_body(self, response: Response) -> bool:
         assert isinstance(response, SuccessResponse)
-        return self.get_json_schema() is not None and response.has_data()
+        return self.get_payload_schema() is not None and response.has_data()
 
     def _get_body(self, response: Response) -> Optional[Dict]:
         assert isinstance(response, SuccessResponse)
@@ -139,18 +193,13 @@ class ErrorResponse(Response):
 
 
 class Endpoint(with_metaclass(ContractsMeta)):
-    _allowed_methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
-
     @contract
-    def __init__(self, factory: Factory, name: str, method: str, path: str,
+    def __init__(self, factory: Factory, name: str, path: str,
                  request_meta_class: type,
                  response_meta_class: type):
         assert issubclass(request_meta_class, RequestMeta)
         assert issubclass(response_meta_class, ResponseMeta)
         self._name = name
-        method = method.upper()
-        assert method in self._allowed_methods
-        self._method = method
         self._path = path
         self._request_meta = factory.defer(request_meta_class)
         self._response_meta = factory.defer(response_meta_class)
@@ -158,10 +207,6 @@ class Endpoint(with_metaclass(ContractsMeta)):
     @property
     def name(self) -> str:
         return self._name
-
-    @property
-    def method(self) -> str:
-        return self._method
 
     @property
     def path(self) -> str:
@@ -185,8 +230,7 @@ class Endpoint(with_metaclass(ContractsMeta)):
 
 
 class EndpointRepository(with_metaclass(ContractsMeta)):
-    @contract
-    def get_endpoint(self, endpoint_name: str) -> Endpoint:
+    def get_endpoint(self, endpoint_name: str) -> Optional[Endpoint]:
         pass
 
     @contract
@@ -216,18 +260,23 @@ class EndpointFactoryRepository(EndpointRepository):
     def get_endpoint(self, endpoint_name: str):
         if self._endpoints is None:
             self._aggregate_endpoints()
-        return self._endpoints[endpoint_name]
+
+        for endpoint in self._endpoints:
+            if endpoint_name == endpoint.name:
+                return endpoint
+        return None
 
     def get_endpoints(self):
         if self._endpoints is None:
             self._aggregate_endpoints()
-        return self._endpoints.values()
+        return self._endpoints
 
     def _aggregate_endpoints(self):
-        self._endpoints = {}
+        self._endpoints = []
         for endpoint_class in self._endpoint_classes:
             endpoint = self._factory.new(endpoint_class)
-            self._endpoints[endpoint.name] = endpoint
+            assert isinstance(endpoint, Endpoint)
+            self._endpoints.append(endpoint)
 
 
 class NestedEndpointRepository(EndpointRepository):
@@ -242,93 +291,19 @@ class NestedEndpointRepository(EndpointRepository):
     def get_endpoint(self, endpoint_name: str):
         if self._endpoints is None:
             self._aggregate_endpoints()
-        return self._endpoints[endpoint_name]
+
+        for endpoint in self._endpoints:
+            if endpoint_name == endpoint.name:
+                return endpoint
+        return None
 
     def get_endpoints(self):
         if self._endpoints is None:
             self._aggregate_endpoints()
-        return self._endpoints.values()
+        return self._endpoints
 
     def _aggregate_endpoints(self):
-        self._endpoints = {}
+        self._endpoints = []
         for endpoints in self._endpoint_repositories:
             for endpoint in endpoints.get_endpoints():
-                self._endpoints[endpoint.name] = endpoint
-
-
-class JsonSchemaResponse(SuccessResponse):
-    @contract
-    def __init__(self, schema: Json):
-        super().__init__()
-        self._has_data = True
-        self._data = schema.data
-
-
-class JsonSchemaResponseMeta(SuccessResponseMeta):
-    def to_http_response(self, response):
-        assert isinstance(response, JsonSchemaResponse)
-        return super().to_http_response(response)
-
-    def get_json_schema(self):
-        return Json.from_data({
-            '$ref': 'http://json-schema.org/draft-04/schema#',
-            'description': 'A JSON Schema.',
-        })
-
-
-class AllMessagesJsonSchemaEndpoint(Endpoint, AppAwareFactory):
-    NAME = 'schemas'
-
-    def __init__(self, factory, schemas):
-        super().__init__(factory, self.NAME, 'GET', '/about/json/schema',
-                         NonConfigurableRequestMeta,
-                         JsonSchemaResponseMeta)
-        self._schemas = schemas
-
-    @classmethod
-    def from_app(cls, app):
-        return cls(app.factory, app.service('http', 'schemas'))
-
-    def handle(self, request):
-        return JsonSchemaResponse(self._schemas.get_for_all_messages())
-
-
-class EndpointRequest(Request):
-    @contract
-    def __init__(self, endpoint_name: str):
-        self._endpoint_name = endpoint_name
-
-    @property
-    @contract
-    def endpoint_name(self) -> str:
-        return self._endpoint_name
-
-
-class EndpointRequestMeta(RequestMeta):
-    """
-    Defines an endpoint-specific request.
-    """
-
-    def from_http_request(self, http_request, parameters):
-        return EndpointRequest(parameters['endpoint_name'])
-
-
-class ResponseJsonSchemaEndpoint(Endpoint, AppAwareFactory):
-    NAME = 'schemas.response'
-
-    @contract
-    def __init__(self, factory: Factory, schemas):
-        super().__init__(factory, self.NAME, 'GET',
-                         '/about/json/schema/response/<endpoint_name>',
-                         EndpointRequestMeta,
-                         JsonSchemaResponseMeta)
-        self._schemas = schemas
-
-    @classmethod
-    def from_app(cls, app):
-        return cls(app.factory, app.service('http', 'schemas'))
-
-    def handle(self, request):
-        assert isinstance(request, EndpointRequest)
-        return JsonSchemaResponse(
-            self._schemas.get_for_response(request.endpoint_name))
+                self._endpoints.append(endpoint)

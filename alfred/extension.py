@@ -48,7 +48,9 @@ class AppAwareClassFactory(Factory):
             raise FactoryError(
                 'Specification must be a class, but is a %s.' % type(spec))
         try:
-            return spec.from_app(self._app)
+            instance = spec.from_app(self._app)
+            assert isinstance(instance, spec)
+            return instance
         except Exception as e:
             raise FactoryError(
                 'Fix the following error that occurs in %s.from_app(): %s' %

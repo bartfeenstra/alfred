@@ -3,6 +3,8 @@ source =
     alfred
     alfred_http
     alfred_manor
+    alfred_openapi
+    alfred_rest
 
 omit =
     */test*.py

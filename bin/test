@@ -5,6 +5,8 @@
     flake8 ./alfred
     flake8 ./alfred_http
     flake8 ./alfred_manor
+    flake8 ./alfred_openapi
+    flake8 ./alfred_rest
     coverage run -m nose2 &&
     coverage report
 )
