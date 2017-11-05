@@ -8,5 +8,5 @@
     flake8 --ignore=E501 ./alfred_openapi
     flake8 --ignore=E501 ./alfred_rest
     coverage run -m nose2 &&
-    coverage report
+    coverage report -m
 )
