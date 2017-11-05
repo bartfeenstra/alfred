@@ -31,7 +31,9 @@ class FlaskApp(Flask):
             route_endpoints.setdefault(endpoint.path, [])
             route_endpoints[endpoint.path].append(endpoint)
         for path, endpoints in route_endpoints.items():
-            self.add_url_rule(path,
+            route_name = path
+            path = path.replace('{', '<').replace('}', '>')
+            self.add_url_rule(path, endpoint=route_name,
                               view_func=EndpointView.as_view(endpoints[0].path,
                                                              endpoints))
 
@@ -45,11 +47,14 @@ class EndpointView(MethodView):
     def _build_view(endpoint: Endpoint):
         def _view(**kwargs):
             try:
+                # @todo What makes endpoints unique? Their path, method, and content type.
+                # @todo We only check paths and methods now. Check content types too.
+                # @todo Can we let Flask validate incoming Content-Type and Accept-Type headers?
                 # Because Werkzeug uses duck-typed proxies, we access a
                 # protected method to get the real request, so it passes our
                 # type checks.
                 if isinstance(current_http_request_proxy, LocalProxy):
-                    current_http_request = current_http_request_proxy._get_current_object()  # noqa: E501
+                    current_http_request = current_http_request_proxy._get_current_object()
                 else:
                     current_http_request = current_http_request_proxy
 

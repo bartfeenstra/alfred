@@ -7,6 +7,7 @@ from contracts import contract, ContractsMeta, with_metaclass
 from flask import Request as HttpRequest, Response as HttpResponse, url_for
 from marshmallow import Schema
 
+from alfred import format_iter
 from alfred.app import Factory
 from alfred.extension import AppAwareFactory
 
@@ -224,9 +225,24 @@ class Endpoint(with_metaclass(ContractsMeta)):
         # @todo Find out why LazyValue.__get__() does not work here.
         return self._response_meta.value
 
+    @abc.abstractmethod
     @contract
     def handle(self, request: Request) -> Response:
         pass
+
+
+class EndpointNotFound(RuntimeError):
+    def __init__(self, endpoint_name: str, available_endpoints: Optional[Iterable[Endpoint]]=None):
+        available_endpoints = list(
+            available_endpoints) if available_endpoints is not None else []
+        if not available_endpoints:
+            message = 'Could not find endpoint "%s", because there are no endpoints.' % endpoint_name
+        else:
+            available_endpoint_names = map(
+                lambda endpoint: endpoint.name, available_endpoints)
+            message = 'Could not find endpoint "%s". Did you mean one of the following?\n' % endpoint_name + \
+                      format_iter(available_endpoint_names)
+        super().__init__(message)
 
 
 class EndpointRepository(with_metaclass(ContractsMeta)):
@@ -238,16 +254,19 @@ class EndpointRepository(with_metaclass(ContractsMeta)):
         pass
 
 
-class EndpointUrlBuilder:
+class StaticEndpointRepository(EndpointRepository):
     @contract
-    def __init__(self, endpoints: EndpointRepository):
+    def __init__(self, endpoints: Iterable):
         self._endpoints = endpoints
 
-    def build(self, endpoint_name: str, parameters: Optional[Dict]):
-        endpoint = self._endpoints.get_endpoint(endpoint_name)
-        if parameters is None:
-            parameters = {}
-        return url_for(endpoint.path, **parameters)
+    def get_endpoint(self, endpoint_name: str):
+        for endpoint in self._endpoints:
+            if endpoint_name == endpoint.name:
+                return endpoint
+        raise EndpointNotFound(endpoint_name, self._endpoints)
+
+    def get_endpoints(self):
+        return self._endpoints
 
 
 class EndpointFactoryRepository(EndpointRepository):
@@ -264,7 +283,7 @@ class EndpointFactoryRepository(EndpointRepository):
         for endpoint in self._endpoints:
             if endpoint_name == endpoint.name:
                 return endpoint
-        return None
+        raise EndpointNotFound(endpoint_name, self._endpoints)
 
     def get_endpoints(self):
         if self._endpoints is None:
@@ -297,7 +316,7 @@ class NestedEndpointRepository(EndpointRepository):
         for endpoint in self._endpoints:
             if endpoint_name == endpoint.name:
                 return endpoint
-        return None
+        raise EndpointNotFound(endpoint_name, self._endpoints)
 
     def get_endpoints(self):
         if self._endpoints is None:
@@ -309,3 +328,15 @@ class NestedEndpointRepository(EndpointRepository):
         for repository in self._endpoint_repositories:
             for endpoint in repository.get_endpoints():
                 self._endpoints.append(endpoint)
+
+
+class EndpointUrlBuilder:
+    @contract
+    def __init__(self, endpoints: EndpointRepository):
+        self._endpoints = endpoints
+
+    def build(self, endpoint_name: str, parameters: Optional[Dict]=None):
+        endpoint = self._endpoints.get_endpoint(endpoint_name)
+        if parameters is None:
+            parameters = {}
+        return url_for(endpoint.path, **parameters)

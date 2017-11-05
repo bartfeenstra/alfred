@@ -7,7 +7,7 @@ def data_provider(data_provider):
             :param args:
             :return:
             """
-            for fixture_name, test_method_fixture_args in data_provider().items():  # noqa: E501
+            for fixture_name, test_method_fixture_args in data_provider().items():
                 try:
                     test_method(self, *test_method_args,
                                 *test_method_fixture_args,

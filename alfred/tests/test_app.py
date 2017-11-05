@@ -1,7 +1,7 @@
 from unittest import TestCase
 
 from alfred.app import ClassFactory, FactoryError, CallableFactory, \
-    MultipleFactories, App, Factory
+    MultipleFactories, App, Factory, Extension
 
 
 class CallableFactoryTest(TestCase):
@@ -87,6 +87,19 @@ class MultipleFactoriesTest(TestCase):
 
 
 class AppTest(TestCase):
+    class TestExtension(Extension):
+        @staticmethod
+        def name():
+            return 'test'
+
+        @Extension.service()
+        def _foo(self):
+            return self._app.service('test', 'bar')
+
+        @Extension.service()
+        def _bar(self):
+            return self._app.service('test', 'foo')
+
     def _without_parameters(self):
         return 'without'
 
@@ -98,3 +111,9 @@ class AppTest(TestCase):
         # Confirm the default factory can at least use simple specifications.
         instance = factory.new(self._without_parameters)
         self.assertEqual(instance, 'without')
+
+    def test_service_inifite_loop(self):
+        sut = App()
+        sut.add_extension(self.TestExtension)
+        with self.assertRaises(FactoryError):
+            sut.service('test', 'foo')

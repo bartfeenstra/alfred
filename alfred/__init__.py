@@ -1,3 +1,5 @@
+from typing import Iterable
+
 from contracts import contract
 
 
@@ -16,3 +18,13 @@ def indent(string: str, indentation='   '):
     """
     return "\n".join(
         map(lambda line: '%s%s' % (indentation, line), string.split("\n")))
+
+
+@contract
+def format_iter(items: Iterable):
+    entry = 1
+    formatted = []
+    for item in items:
+        formatted.append('%d ) %s' % (entry, item))
+        entry += 1
+    return '\n'.join(formatted)

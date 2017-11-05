@@ -1,9 +1,17 @@
 from unittest import TestCase
 from unittest.mock import Mock
 
-from alfred.app import Factory, FactoryError
+from contracts import contract
+from werkzeug.routing import BuildError
+
+from alfred.app import Factory, FactoryError, Extension
+from alfred.extension import AppAwareFactory
 from alfred_http.endpoints import EndpointFactoryRepository, Endpoint, \
-    NestedEndpointRepository, EndpointRepository
+    NestedEndpointRepository, EndpointRepository, NonConfigurableRequestMeta, \
+    SuccessResponseMeta, EndpointNotFound, \
+    StaticEndpointRepository
+from alfred_http.extension import HttpExtension
+from alfred_http.tests import HttpTestCase
 
 
 class FooEndpoint(Endpoint):
@@ -42,6 +50,40 @@ def mock_endpoints():
     return (endpoint_foo, endpoint_bar, endpoint_bar)
 
 
+class StaticEndpointRepositoryTest(TestCase):
+    def testGetEndpointWithExistingEndpoint(self):
+        endpoint_foo, endpoint_bar, endpoint_baz = mock_endpoints()
+        sut = StaticEndpointRepository([endpoint_foo,
+                                        endpoint_bar,
+                                        endpoint_baz])
+        self.assertEquals(sut.get_endpoint('bar'), endpoint_bar)
+
+    def testGetEndpointWithNonExistingEndpoint(self):
+        endpoint_foo, endpoint_bar, endpoint_baz = mock_endpoints()
+        sut = StaticEndpointRepository([endpoint_foo,
+                                        endpoint_bar,
+                                        endpoint_baz])
+        with self.assertRaises(EndpointNotFound):
+            sut.get_endpoint('qux')
+
+    def testGetEndpointWithoutEndpoints(self):
+        sut = StaticEndpointRepository([])
+        with self.assertRaises(EndpointNotFound):
+            sut.get_endpoint('qux')
+
+    def testGetEndpointsWithEndpoints(self):
+        endpoint_foo, endpoint_bar, endpoint_baz = mock_endpoints()
+        sut = StaticEndpointRepository([endpoint_foo,
+                                        endpoint_bar,
+                                        endpoint_baz])
+        self.assertSequenceEqual(sut.get_endpoints(),
+                                 [endpoint_foo, endpoint_bar, endpoint_baz])
+
+    def testGetEndpointsWithoutEndpoints(self):
+        sut = StaticEndpointRepository([])
+        self.assertSequenceEqual(sut.get_endpoints(), [])
+
+
 class EndpointFactoryRepositoryTest(TestCase):
     def mock_factory(self):
         endpoints = mock_endpoints()
@@ -62,12 +104,14 @@ class EndpointFactoryRepositoryTest(TestCase):
                                         [endpoint_foo.__class__,
                                          endpoint_bar.__class__,
                                          endpoint_baz.__class__])
-        self.assertIsNone(sut.get_endpoint('qux'))
+        with self.assertRaises(EndpointNotFound):
+            sut.get_endpoint('qux')
 
     def testGetEndpointWithoutEndpoints(self):
         factory = InstanceFactory([])
         sut = EndpointFactoryRepository(factory, [])
-        self.assertIsNone(sut.get_endpoint('qux'))
+        with self.assertRaises(EndpointNotFound):
+            sut.get_endpoint('qux')
 
     def testGetEndpointsWithEndpoints(self):
         factory, endpoint_foo, endpoint_bar, endpoint_baz = self.mock_factory()
@@ -109,11 +153,13 @@ class NestedEndpointRepositoryTest(TestCase):
         sut = NestedEndpointRepository()
         for repository in repositories:
             sut.add_endpoints(repository)
-        self.assertIsNone(sut.get_endpoint('qux'))
+        with self.assertRaises(EndpointNotFound):
+            sut.get_endpoint('qux')
 
     def testGetEndpointWithoutEndpoints(self):
         sut = NestedEndpointRepository()
-        self.assertIsNone(sut.get_endpoint('qux'))
+        with self.assertRaises(EndpointNotFound):
+            sut.get_endpoint('qux')
 
         # Add nested repositories, and assert the endpoint is available now.
         repositories, endpoints = self.mock_endpoints()
@@ -139,3 +185,73 @@ class NestedEndpointRepositoryTest(TestCase):
             sut.add_endpoints(repository)
         self.assertSequenceEqual(sut.get_endpoints(),
                                  endpoints)
+
+
+class EndpointUrlBuilderTest(HttpTestCase):
+    class TestEndpoint(Endpoint, AppAwareFactory):
+        @contract
+        def __init__(self, factory: Factory):
+            super().__init__(factory, 'http_test', '/http/test',
+                             NonConfigurableRequestMeta, SuccessResponseMeta)
+
+        @classmethod
+        def from_app(cls, app):
+            return cls(app.factory)
+
+        def handle(self, request):
+            pass
+
+    class TestEndpointWithUrlPathParameters(Endpoint, AppAwareFactory):
+        @contract
+        def __init__(self, factory: Factory):
+            super().__init__(factory, 'http_test_with_parameters', '/http/test/{foo}',
+                             NonConfigurableRequestMeta, SuccessResponseMeta)
+
+        @classmethod
+        def from_app(cls, app):
+            return cls(app.factory)
+
+        def handle(self, request):
+            pass
+
+    class EndpointProvidingExtension(Extension):
+        @staticmethod
+        def dependencies():
+            return [HttpExtension]
+
+        @staticmethod
+        def name():
+            return 'http_test'
+
+        @Extension.service(tags=('http_endpoints',))
+        def _endpoints(self):
+            return EndpointFactoryRepository(self._app.factory, [
+                EndpointUrlBuilderTest.TestEndpoint,
+                EndpointUrlBuilderTest.TestEndpointWithUrlPathParameters,
+            ])
+
+    @property
+    def extension_classes(self):
+        return [self.EndpointProvidingExtension]
+
+    def testBuildWithoutParameters(self):
+        sut = self._app.service('http', 'urls')
+        self.assertEquals(sut.build('http_test'),
+                          'http://example.com/http/test')
+
+    def testBuildWithParameters(self):
+        sut = self._app.service('http', 'urls')
+        self.assertEquals(sut.build('http_test_with_parameters', {
+            'foo': 'bar',
+        }),
+            'http://example.com/http/test/bar')
+
+    def testBuildWithMissingParameters(self):
+        sut = self._app.service('http', 'urls')
+        with self.assertRaises(BuildError):
+            sut.build('http_test_with_parameters')
+
+    def testBuildWithNonExistingEndpoint(self):
+        sut = self._app.service('http', 'urls')
+        with self.assertRaises(EndpointNotFound):
+            sut.build('i_do_not_exist')
