@@ -1,6 +1,7 @@
 from alfred.app import Extension
-from alfred_http.endpoints import EndpointFactoryRepository, OpenApiEndpoint
+from alfred_http.endpoints import EndpointFactoryRepository
 from alfred_http.extension import HttpExtension
+from alfred_openapi.endpoints import OpenApiEndpoint
 from alfred_openapi.openapi import OpenApi
 
 
@@ -15,8 +16,7 @@ class OpenApiExtension(Extension):
 
     @Extension.service()
     def _openapi(self):
-        return OpenApi(self._app.service('http', 'endpoints'),
-                       self._app.service('http', 'schemas'))
+        return OpenApi(self._app.service('http', 'endpoints'))
 
     @Extension.service(tags=('http_endpoints',))
     def _endpoints(self):

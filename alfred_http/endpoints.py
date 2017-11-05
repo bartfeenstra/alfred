@@ -1,11 +1,10 @@
 import abc
-import json
 from copy import copy
 from typing import Iterable, Optional, Dict
 
 from contracts import contract, ContractsMeta, with_metaclass
-from flask import Request as HttpRequest, Response as HttpResponse, url_for
-from marshmallow import Schema
+from flask import Request as HttpRequest, url_for
+from flask import Response as HttpResponse
 
 from alfred import format_iter
 from alfred.app import Factory
@@ -24,12 +23,8 @@ class Error(Exception):
 
 class MessageMeta(AppAwareFactory,
                   with_metaclass(ContractsMeta)):
-    def get_payload_schema(self) -> Optional[Schema]:
-        return None
-
     @abc.abstractmethod
-    @contract
-    def get_content_type(self) -> str:
+    def get_content_type(self) -> Optional[str]:
         pass
 
 
@@ -41,39 +36,6 @@ class Request(Message):
     pass
 
 
-# @todo RequestMeta should be much more important than it really is.
-# @todo Endpoints are just glue between RequestMeta and ResponseMeta
-# @todo So RequestMeta should define what it needs, such as HTTP method,
-# @todo parameters (required in path, and optional in query). Because RequestMeta
-# @todo and ResponseMeta can be reused across endpoints, things like the full
-# @todo path remain endpoint-specific.
-# @todo RequestMeta
-# @todo - NEEDS THE ENDPOINT (but only for getting its OWN schema anyway...)
-# @todo - HTTP method
-# @todo - Required parameters + schemas
-# @todo - Optional parameters + schemas
-# @todo - Request body schema
-# @todo - Request content type
-# @todo
-# @todo ResponseMeta
-# @todo - NEEDS THE ENDPOINT (but only for getting its OWN schema anyway...)
-# @todo - Response body schema
-# @todo - Response content types
-# @todo   We must allow multiple here, because some systems might want responses with or without JSON-LD.
-# @todo
-# @todo Endpoint
-# @todo - EXPOSES MESSAGE META
-# @todo - Takes always/usually a single request type, but can return multiple
-# @todo - Full path (must include required RequestMeta parameters)
-# @todo
-# @todo UNSOLVED
-# @todo - What if we want multiple 'endpoints' behind the same URL and method
-# @todo   but that accept different, non-overlapping content types? LET'S KEEP THIS FOR THE FUTURE
-# @todo
-# @todo
-# @todo
-# @todo
-# @todo
 class RequestMeta(MessageMeta):
     _allowed_methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
 
@@ -93,11 +55,6 @@ class RequestMeta(MessageMeta):
     def method(self) -> str:
         return self._method
 
-    @abc.abstractmethod
-    @contract
-    def get_parameter_schemas(self) -> Schema:
-        pass
-
 
 class NonConfigurableRequest(Request):
     pass
@@ -111,38 +68,24 @@ class NonConfigurableRequestMeta(RequestMeta):
     def from_http_request(self, http_request, parameters):
         return NonConfigurableRequest()
 
+    def get_content_type(self):
+        return None
+
+
+class NonConfigurableGetRequestMeta(NonConfigurableRequestMeta):
+    def __init__(self):
+        super().__init__('GET')
+
 
 class Response(Message):
     pass
 
 
-class ResponseMeta(MessageMeta, AppAwareFactory):
-    def __init__(self, schemas):
-        self._schemas = schemas
-
-    @classmethod
-    def from_app(cls, app):
-        return cls(app.service('http', 'schemas'))
-
-    @contract
-    def to_http_response(self, response: Response) -> HttpResponse:
-        http_response = HttpResponse(content_type='application/vnd.api+json')
-        if self._has_body(response):
-            body = self._get_body(response)
-            assert body is None or isinstance(body, Dict)
-            if body is not None:
-                # @todo  PROBLEM:  We're rendering the response, but to get the schema, we'll need the ENDPOINT name... Requests and responses can be used by multiple endpoints...
-                body['$schema'] = self._schemas.get_url_for_response(
-                    'schemas.response')
-            http_response.set_data(json.dumps(body))
+class ResponseMeta(MessageMeta):
+    def to_http_response(self, response) -> HttpResponse:
+        http_response = HttpResponse()
+        http_response.headers.add('Content-Type', self.get_content_type())
         return http_response
-
-    @contract
-    def _has_body(self, response: Response) -> bool:
-        return False
-
-    def _get_body(self, response: Response) -> Optional[Dict]:
-        return None
 
 
 class SuccessResponse(Response):
@@ -162,21 +105,9 @@ class SuccessResponse(Response):
 
 class SuccessResponseMeta(ResponseMeta):
     def to_http_response(self, response):
-        assert isinstance(response, SuccessResponse)
         http_response = super().to_http_response(response)
-        http_response.status_code = 200
+        http_response.status = '200'
         return http_response
-
-    @contract
-    def _has_body(self, response: Response) -> bool:
-        assert isinstance(response, SuccessResponse)
-        return self.get_payload_schema() is not None and response.has_data()
-
-    def _get_body(self, response: Response) -> Optional[Dict]:
-        assert isinstance(response, SuccessResponse)
-        if not self._has_body(response):
-            raise RuntimeError('This response has no body.')
-        return response.get_data()
 
 
 class ErrorResponse(Response):
@@ -232,7 +163,8 @@ class Endpoint(with_metaclass(ContractsMeta)):
 
 
 class EndpointNotFound(RuntimeError):
-    def __init__(self, endpoint_name: str, available_endpoints: Optional[Iterable[Endpoint]]=None):
+    def __init__(self, endpoint_name: str,
+                 available_endpoints: Optional[Iterable[Endpoint]] = None):
         available_endpoints = list(
             available_endpoints) if available_endpoints is not None else []
         if not available_endpoints:
@@ -335,7 +267,7 @@ class EndpointUrlBuilder:
     def __init__(self, endpoints: EndpointRepository):
         self._endpoints = endpoints
 
-    def build(self, endpoint_name: str, parameters: Optional[Dict]=None):
+    def build(self, endpoint_name: str, parameters: Optional[Dict] = None):
         endpoint = self._endpoints.get_endpoint(endpoint_name)
         if parameters is None:
             parameters = {}

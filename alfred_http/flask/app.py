@@ -41,7 +41,8 @@ class FlaskApp(Flask):
 class EndpointView(MethodView):
     def __init__(self, endpoints: List):
         for endpoint in endpoints:
-            setattr(self, endpoint.method.lower(), self._build_view(endpoint))
+            setattr(self, endpoint.request_meta.method.lower(),
+                    self._build_view(endpoint))
 
     @staticmethod
     def _build_view(endpoint: Endpoint):

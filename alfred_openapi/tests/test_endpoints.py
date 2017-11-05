@@ -1,6 +1,6 @@
-from alfred_http.tests import HttpTestCase
+from alfred_openapi.tests import OpenApiTestCase
 
 
-class OpenApiEndpointTest(HttpTestCase):
+class OpenApiEndpointTest(OpenApiTestCase):
     def testEndpoint(self):
-        self.skipTest('Finish the HTTP package first')
+        self.request('openapi')
