@@ -48,9 +48,9 @@ class EndpointView(MethodView):
     def _build_view(endpoint: Endpoint):
         def _view(**kwargs):
             try:
-                # @todo What makes endpoints unique? Their path, method, and content type.
-                # @todo We only check paths and methods now. Check content types too.
                 # @todo Can we let Flask validate incoming Content-Type and Accept-Type headers?
+                # @todo Nah, let the endpoints handle those. In base classes?
+                #
                 # Because Werkzeug uses duck-typed proxies, we access a
                 # protected method to get the real request, so it passes our
                 # type checks.

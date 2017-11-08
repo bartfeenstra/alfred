@@ -1,3 +1,7 @@
-from alfred_http.flask.app import FlaskApp
+from flask_cors import CORS
 
-app = FlaskApp()
+from alfred_http.flask.app import FlaskApp
+from alfred_openapi.extension import OpenApiExtension
+
+app = FlaskApp([OpenApiExtension])
+CORS(app)

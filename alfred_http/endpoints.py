@@ -49,6 +49,15 @@ class RequestMeta(MessageMeta):
     @contract
     def from_http_request(self, http_request: HttpRequest,
                           parameters: Dict) -> Request:
+        """
+        Converts an HTTP request to an API request.
+
+        The HTTP request SHOULD be valid for this request. If it is not,
+        exceptions may be raised.
+        :param http_request:
+        :param parameters:
+        :return:
+        """
         pass
 
     @property
@@ -83,6 +92,11 @@ class Response(Message):
 
 class ResponseMeta(MessageMeta):
     def to_http_response(self, response) -> HttpResponse:
+        """
+        Converts an API response to an HTTP response.
+        :param response:
+        :return:
+        """
         http_response = HttpResponse()
         http_response.headers.add('Content-Type', self.get_content_type())
         return http_response
@@ -159,6 +173,13 @@ class Endpoint(with_metaclass(ContractsMeta)):
     @abc.abstractmethod
     @contract
     def handle(self, request: Request) -> Response:
+        pass
+        # @todo There is a certain type of problem we cannot find just in RequestMeta or ResponseMeta.
+        # @todo This type (usually) doesn't just touch one type of message, but both.
+        # @todo An example is Accept-Type, a request header dependent on response capabilities.
+        # @todo Where do we check this? RequestMeta does not know about ResponseMeta and vice versa.
+        # @todo Endpoints do not know about HTTP messages (and I would like to keep it that way).
+        # @todo Should we do this in our Flask view after all?
         pass
 
 

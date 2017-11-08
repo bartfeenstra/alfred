@@ -1,6 +1,8 @@
 from typing import Optional, Dict
 from unittest import TestCase
 
+from flask import Response as HttpResponse
+
 from alfred_http.flask.app import FlaskApp
 
 
@@ -20,7 +22,8 @@ class HttpTestCase(TestCase):
     def tearDown(self):
         self._flask_app_context.pop()
 
-    def request(self, endpoint_name: str, parameters: Optional[Dict] = None):
+    def request(self, endpoint_name: str,
+                parameters: Optional[Dict] = None) -> HttpResponse:
         if parameters is None:
             parameters = {}
         urls = self._app.service('http', 'urls')
