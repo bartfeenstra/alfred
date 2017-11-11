@@ -26,6 +26,9 @@ class OpenApi:
                     200: {
                         'description': 'A successful response.',
                     },
+                    406: {
+                        'description': 'Returned if the request Accept header does not contain any content type produced by this endpoint.',
+                    },
                 },
             }
 
