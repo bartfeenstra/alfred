@@ -23,9 +23,11 @@ class HttpTestCase(TestCase):
         self._flask_app_context.pop()
 
     def request(self, endpoint_name: str,
-                parameters: Optional[Dict] = None) -> HttpResponse:
+                parameters: Optional[Dict] = None, headers: Optional[Dict]=None) -> HttpResponse:
         if parameters is None:
             parameters = {}
+        if headers is None:
+            headers = {}
         urls = self._app.service('http', 'urls')
         url = urls.build(endpoint_name, parameters)
-        return self._flask_app_client.get(url)
+        return self._flask_app_client.get(url, headers=headers)

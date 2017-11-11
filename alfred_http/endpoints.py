@@ -11,6 +11,43 @@ from alfred.app import Factory
 from alfred.extension import AppAwareFactory
 
 
+# @todo RESOURCE/ENDPOINT
+# @todo - Has a path (must map to request type requirements)
+# @todo - Has request and response types.
+# @todo - Can map Content-Type headers to the available request payload formats.
+# @todo - Can map Accept headers to the available response payload formats.
+# @todo
+# @todo MESSAGE TYPE/META
+# @todo - Has requirements that can be mapped to a payload.
+# @todo - Not specific to endpoints.
+# @todo - Payload conversion can be pluggable, and available payload formats can be exposed.
+# @todo - Can have no payload, and no payload format.
+# @todo - It must be easy to support but one format and message factory.
+# @todo
+# @todo REQUEST TYPE/META
+# @todo - Has requirements that can be mapped to a path.
+# @todo - Has an HTTP method.
+# @todo
+# @todo RESPONSE TYPE/META
+# @todo
+# @todo ===BELOW CAN BE DONE LATER===
+# @todo
+# @todo MESSAGE FACTORIES
+# @todo - Take request requirements and return Commands
+# @todo - Take Results and return response requirements
+# @todo
+# @todo DATA FACTORIES
+# @todo - Serialize and serialize internal types to and from payload formats
+# @todo
+# @todo
+# @todo
+# @todo
+# @todo
+# @todo
+# @todo
+# @todo
+
+
 class Error(Exception):
     @contract
     def __init__(self, code: str):
@@ -24,7 +61,7 @@ class Error(Exception):
 class MessageMeta(AppAwareFactory,
                   with_metaclass(ContractsMeta)):
     @abc.abstractmethod
-    def get_content_type(self) -> Optional[str]:
+    def get_content_types(self) -> Iterable[str]:
         pass
 
 
@@ -77,8 +114,8 @@ class NonConfigurableRequestMeta(RequestMeta):
     def from_http_request(self, http_request, parameters):
         return NonConfigurableRequest()
 
-    def get_content_type(self):
-        return None
+    def get_content_types(self):
+        return []
 
 
 class NonConfigurableGetRequestMeta(NonConfigurableRequestMeta):
@@ -91,14 +128,16 @@ class Response(Message):
 
 
 class ResponseMeta(MessageMeta):
-    def to_http_response(self, response) -> HttpResponse:
+    @contract
+    def to_http_response(self, response, content_type: str) -> HttpResponse:
         """
         Converts an API response to an HTTP response.
         :param response:
         :return:
         """
+        assert content_type in self.get_content_types()
         http_response = HttpResponse()
-        http_response.headers.add('Content-Type', self.get_content_type())
+        http_response.headers.set('Content-Type', content_type)
         return http_response
 
 
@@ -118,8 +157,8 @@ class SuccessResponse(Response):
 
 
 class SuccessResponseMeta(ResponseMeta):
-    def to_http_response(self, response):
-        http_response = super().to_http_response(response)
+    def to_http_response(self, response, content_type):
+        http_response = super().to_http_response(response, content_type)
         http_response.status = '200'
         return http_response
 

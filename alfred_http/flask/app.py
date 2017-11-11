@@ -1,7 +1,8 @@
 from typing import List, Optional
 
-from flask import Flask, request as current_http_request_proxy
+from flask import Flask, request as current_http_request
 from flask.views import MethodView
+from werkzeug.exceptions import NotAcceptable
 from werkzeug.local import LocalProxy
 
 from alfred.app import App
@@ -47,25 +48,27 @@ class EndpointView(MethodView):
     @staticmethod
     def _build_view(endpoint: Endpoint):
         def _view(**kwargs):
-            try:
-                # @todo Can we let Flask validate incoming Content-Type and Accept-Type headers?
-                # @todo Nah, let the endpoints handle those. In base classes?
-                #
-                # Because Werkzeug uses duck-typed proxies, we access a
-                # protected method to get the real request, so it passes our
-                # type checks.
-                if isinstance(current_http_request_proxy, LocalProxy):
-                    current_http_request = current_http_request_proxy._get_current_object()
-                else:
-                    current_http_request = current_http_request_proxy
+            # Check we can deliver the right content type.
+            content_type = current_http_request.accept_mimetypes.best_match(
+                endpoint.response_meta.get_content_types())
+            if content_type is None:
+                raise NotAcceptable()
 
+            try:
                 alfred_request = endpoint.request_meta.from_http_request(
-                    current_http_request, kwargs)
+                    # Because Werkzeug uses duck-typed proxies, we access a
+                    # protected method to get the real request, so it passes
+                    # our type checks.
+                    current_http_request._get_current_object() if isinstance(
+                        current_http_request,
+                        LocalProxy) else current_http_request,
+                    kwargs)
                 assert isinstance(alfred_request, Request)
                 alfred_response = endpoint.handle(alfred_request)
             except Error as e:
                 alfred_response = ErrorResponse().with_error(e)
 
-            return endpoint.response_meta.to_http_response(alfred_response)
+            return endpoint.response_meta.to_http_response(alfred_response,
+                                                           content_type)
 
         return _view

@@ -1,3 +1,4 @@
 apispec ~= 0.27.0
+jinja2 ~= 2.10
 marshmallow ~= 3.0.0b4
 pycontracts ~= 1.8.0

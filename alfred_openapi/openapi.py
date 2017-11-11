@@ -18,12 +18,10 @@ class OpenApi:
         for endpoint in self._endpoints.get_endpoints():
             method = endpoint.request_meta.method.lower()
 
-            consumes = endpoint.request_meta.get_content_type()
-            produces = endpoint.response_meta.get_content_type()
             operations = {
                 'operationId': endpoint.name,
-                'consumes': [consumes] if consumes is not None else [],
-                'produces': [produces] if consumes is not None else [],
+                'consumes': endpoint.request_meta.get_content_types(),
+                'produces': endpoint.response_meta.get_content_types(),
                 'responses': {
                     200: {
                         'description': 'A successful response.',
