@@ -11,8 +11,13 @@ class OpenApi:
 
     @contract
     def get(self) -> APISpec:
+        responses = {
+            406: {
+                'description': 'Returned if the request Accept header does not contain any content type produced by this endpoint.',
+            },
+        }
         # @todo How to determine the API version?
-        spec = APISpec('Alfred', '0.0.0')
+        spec = APISpec('Alfred', '0.0.0', responses=responses)
 
         paths_operations = {}
         for endpoint in self._endpoints.get_endpoints():
@@ -27,7 +32,7 @@ class OpenApi:
                         'description': 'A successful response.',
                     },
                     406: {
-                        'description': 'Returned if the request Accept header does not contain any content type produced by this endpoint.',
+                        '$ref': '#/responses/406',
                     },
                 },
             }
