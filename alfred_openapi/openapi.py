@@ -13,11 +13,14 @@ class OpenApi:
     def get(self) -> APISpec:
         responses = {
             406: {
-                'description': 'Returned if the request Accept header does not contain any content type produced by this endpoint.',
+                'description': 'Returned if the request `Accept` header does not contain any content type produced by this endpoint.',
             },
         }
+        info = {
+            'description': 'This document describes Alfred\'s HTTP API in the [OpenApi 2.0](https://github.com/OAI/OpenAPI-Specification/blob/master/versions/2.0.md) format.',
+        }
         # @todo How to determine the API version?
-        spec = APISpec('Alfred', '0.0.0', responses=responses)
+        spec = APISpec('Alfred', '0.0.0', info=info, responses=responses)
 
         paths_operations = {}
         for endpoint in self._endpoints.get_endpoints():
