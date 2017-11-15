@@ -4,3 +4,4 @@
 -r ./alfred_manor/requirements-dev.txt
 -r ./alfred_openapi/requirements-dev.txt
 -r ./alfred_rest/requirements-dev.txt
+coveralls ~= 1.2.0
