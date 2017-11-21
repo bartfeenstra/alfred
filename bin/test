@@ -2,6 +2,10 @@
 
 (
     cd `dirname "$0"`/..
+    FLASK_APP=./alfred_http/flask/entry_point.py python -m flask run &
+    sleep 3
+    PID=`echo $!`
+    trap "kill $PID" EXIT
     flake8 --ignore=E501 ./alfred
     flake8 --ignore=E501 ./alfred_http
     flake8 --ignore=E501 ./alfred_manor

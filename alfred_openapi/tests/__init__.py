@@ -3,6 +3,5 @@ from alfred_openapi.extension import OpenApiExtension
 
 
 class OpenApiTestCase(HttpTestCase):
-    @property
-    def extension_classes(self):
-        return [OpenApiExtension]
+    def get_extension_classes(self):
+        return super().get_extension_classes() + [OpenApiExtension]

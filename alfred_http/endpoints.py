@@ -8,44 +8,6 @@ from flask import Response as HttpResponse
 
 from alfred import format_iter
 from alfred.app import Factory
-from alfred.extension import AppAwareFactory
-
-
-# @todo RESOURCE/ENDPOINT
-# @todo - Has a path (must map to request type requirements)
-# @todo - Has request and response types.
-# @todo - Can map Content-Type headers to the available request payload formats.
-# @todo - Can map Accept headers to the available response payload formats.
-# @todo
-# @todo MESSAGE TYPE/META
-# @todo - Has requirements that can be mapped to a payload.
-# @todo - Not specific to endpoints.
-# @todo - Payload conversion can be pluggable, and available payload formats can be exposed.
-# @todo - Can have no payload, and no payload format.
-# @todo - It must be easy to support but one format and message factory.
-# @todo
-# @todo REQUEST TYPE/META
-# @todo - Has requirements that can be mapped to a path.
-# @todo - Has an HTTP method.
-# @todo
-# @todo RESPONSE TYPE/META
-# @todo
-# @todo ===BELOW CAN BE DONE LATER===
-# @todo
-# @todo MESSAGE FACTORIES
-# @todo - Take request requirements and return Commands
-# @todo - Take Results and return response requirements
-# @todo
-# @todo DATA FACTORIES
-# @todo - Serialize and serialize internal types to and from payload formats
-# @todo
-# @todo
-# @todo
-# @todo
-# @todo
-# @todo
-# @todo
-# @todo
 
 
 class Error(Exception):
@@ -58,8 +20,23 @@ class Error(Exception):
         return self._code
 
 
-class MessageMeta(AppAwareFactory,
-                  with_metaclass(ContractsMeta)):
+class NotFoundError(Error):
+    CODE = 'not_found'
+
+    def __init__(self):
+        super().__init__(self.CODE)
+
+
+class MessageMeta(with_metaclass(ContractsMeta)):
+    @contract
+    def __init__(self, name: str):
+        self._name = name
+
+    @property
+    @contract
+    def name(self) -> str:
+        return self._name
+
     @abc.abstractmethod
     def get_content_types(self) -> Iterable[str]:
         pass
@@ -77,7 +54,8 @@ class RequestMeta(MessageMeta):
     _allowed_methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
 
     @contract
-    def __init__(self, method: str):
+    def __init__(self, name: str, method: str):
+        super().__init__(name)
         method = method.upper()
         assert method in self._allowed_methods
         self._method = method
@@ -110,6 +88,10 @@ class NonConfigurableRequestMeta(RequestMeta):
     """
     Defines a non-configurable request.
     """
+
+    @contract
+    def __init__(self, method: str):
+        super().__init__('non-configurable-%s' % method.lower(), method)
 
     def from_http_request(self, http_request, parameters):
         return NonConfigurableRequest()
@@ -213,13 +195,6 @@ class Endpoint(with_metaclass(ContractsMeta)):
     @contract
     def handle(self, request: Request) -> Response:
         pass
-        # @todo There is a certain type of problem we cannot find just in RequestMeta or ResponseMeta.
-        # @todo This type (usually) doesn't just touch one type of message, but both.
-        # @todo An example is Accept-Type, a request header dependent on response capabilities.
-        # @todo Where do we check this? RequestMeta does not know about ResponseMeta and vice versa.
-        # @todo Endpoints do not know about HTTP messages (and I would like to keep it that way).
-        # @todo Should we do this in our Flask view after all?
-        pass
 
 
 class EndpointNotFound(RuntimeError):
@@ -230,14 +205,48 @@ class EndpointNotFound(RuntimeError):
         if not available_endpoints:
             message = 'Could not find endpoint "%s", because there are no endpoints.' % endpoint_name
         else:
-            available_endpoint_names = map(
+            available_names = map(
                 lambda endpoint: endpoint.name, available_endpoints)
             message = 'Could not find endpoint "%s". Did you mean one of the following?\n' % endpoint_name + \
-                      format_iter(available_endpoint_names)
+                      format_iter(available_names)
+        super().__init__(message)
+
+
+class RequestNotFound(RuntimeError):
+    def __init__(self, request_name: str,
+                 available_requests: Optional[Iterable[RequestMeta]] = None):
+        available_requests = list(
+            available_requests) if available_requests is not None else []
+        if not available_requests:
+            message = 'Could not find requests "%s", because there are no requests, and no endpoints.' % request_name
+        else:
+            available_names = map(
+                lambda request: request.name, available_requests)
+            message = 'Could not find request "%s". Did you mean one of the following?\n' % request_name + \
+                      format_iter(available_names)
+        super().__init__(message)
+
+
+class ResponseNotFound(RuntimeError):
+    def __init__(self, response_name: str,
+                 available_responses: Optional[Iterable[ResponseMeta]] = None):
+        available_responses = list(
+            available_responses) if available_responses is not None else []
+        if not available_responses:
+            message = 'Could not find response "%s", because there are no responses, and no endpoints.' % response_name
+        else:
+            available_names = map(
+                lambda response: response.name, available_responses)
+            message = 'Could not find response "%s". Did you mean one of the following?\n' % response_name + \
+                      format_iter(available_names)
         super().__init__(message)
 
 
 class EndpointRepository(with_metaclass(ContractsMeta)):
+    def __init__(self):
+        self._request_metas = None
+        self._response_metas = None
+
     def get_endpoint(self, endpoint_name: str) -> Optional[Endpoint]:
         pass
 
@@ -245,10 +254,54 @@ class EndpointRepository(with_metaclass(ContractsMeta)):
     def get_endpoints(self) -> Iterable:
         pass
 
+    def get_request_meta(self, request_name: str) -> Optional[RequestMeta]:
+        if self._request_metas is None:
+            self._aggregate_metas()
+
+        for request_meta in self._request_metas:
+            if request_name == request_meta.name:
+                return request_meta
+        raise RequestNotFound(request_name, self._request_metas)
+
+    @contract
+    def get_request_metas(self) -> Iterable:
+        if self._request_metas is None:
+            self._aggregate_metas()
+
+        return self._request_metas
+
+    def get_response_meta(self, response_name: str) -> Optional[ResponseMeta]:
+        if self._request_metas is None:
+            self._aggregate_metas()
+
+        for response_meta in self._response_metas:
+            if response_name == response_meta.name:
+                return response_meta
+        raise ResponseNotFound(response_name, self._response_metas)
+
+    @contract
+    def get_response_metas(self) -> Iterable:
+        if self._response_metas is None:
+            self._aggregate_metas()
+
+        return self._response_metas
+
+    def _aggregate_metas(self):
+        request_metas = {}
+        response_metas = {}
+        for endpoint in self.get_endpoints():
+            request_metas.setdefault(
+                endpoint.request_meta.name, endpoint.request_meta)
+            response_metas.setdefault(
+                endpoint.response_meta.name, endpoint.response_meta)
+        self._request_metas = request_metas.values()
+        self._response_metas = response_metas.values()
+
 
 class StaticEndpointRepository(EndpointRepository):
     @contract
     def __init__(self, endpoints: Iterable):
+        super().__init__()
         self._endpoints = endpoints
 
     def get_endpoint(self, endpoint_name: str):
@@ -264,6 +317,7 @@ class StaticEndpointRepository(EndpointRepository):
 class EndpointFactoryRepository(EndpointRepository):
     @contract
     def __init__(self, factory: Factory, endpoint_classes: Iterable):
+        super().__init__()
         self._factory = factory
         self._endpoint_classes = endpoint_classes
         self._endpoints = None
@@ -292,6 +346,7 @@ class EndpointFactoryRepository(EndpointRepository):
 
 class NestedEndpointRepository(EndpointRepository):
     def __init__(self):
+        super().__init__()
         self._endpoints = None
         self._endpoint_repositories = []
 
@@ -331,4 +386,4 @@ class EndpointUrlBuilder:
         endpoint = self._endpoints.get_endpoint(endpoint_name)
         if parameters is None:
             parameters = {}
-        return url_for(endpoint.path, **parameters)
+        return url_for(endpoint.path, _external=True, **parameters)

@@ -6,9 +6,8 @@ from jinja2 import Template
 
 from alfred.app import Factory
 from alfred.extension import AppAwareFactory
-from alfred_http.endpoints import SuccessResponse, SuccessResponseMeta, \
-    Endpoint, NonConfigurableRequest, \
-    NonConfigurableGetRequestMeta
+from alfred_http.endpoints import Endpoint, NonConfigurableRequest, \
+    NonConfigurableGetRequestMeta, SuccessResponseMeta, SuccessResponse
 from alfred_openapi import RESOURCE_PATH
 
 
@@ -24,9 +23,13 @@ class OpenApiResponse(SuccessResponse):
 
 
 class OpenApiResponseMeta(SuccessResponseMeta):
+    def __init__(self):
+        super().__init__('openapi')
+
     def to_http_response(self, response, content_type):
         assert isinstance(response, OpenApiResponse)
         http_response = super().to_http_response(response, content_type)
+        http_response.status = '200'
         if 'application/json' == content_type:
             return self._to_json(http_response, response)
         if 'text/html' == content_type:

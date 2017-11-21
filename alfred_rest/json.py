@@ -1,6 +1,7 @@
 import json
 from typing import Optional
 
+import requests
 from jsonschema import RefResolver, validate
 
 
@@ -36,8 +37,9 @@ class Validator:
                 raise ValueError('The JSON is not an object: %s' % message)
             if '$schema' not in data:
                 raise KeyError('No "$schema" key found: %s' % message)
-            with open(data['$schema']) as file:
-                schema = json.load(file)
+            schema = requests.get(data['$schema'], headers={
+                'Accept': 'application/schema+json; q=1, application/json; q=0.9, */*',
+            }).json()
         else:
             schema = schema.data
 

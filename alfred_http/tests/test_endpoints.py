@@ -8,8 +8,8 @@ from alfred.app import Factory, FactoryError, Extension
 from alfred.extension import AppAwareFactory
 from alfred_http.endpoints import EndpointFactoryRepository, Endpoint, \
     NestedEndpointRepository, EndpointRepository, NonConfigurableRequestMeta, \
-    SuccessResponseMeta, EndpointNotFound, \
-    StaticEndpointRepository
+    EndpointNotFound, \
+    StaticEndpointRepository, SuccessResponseMeta
 from alfred_http.extension import HttpExtension
 from alfred_http.tests import HttpTestCase
 
@@ -230,21 +230,20 @@ class EndpointUrlBuilderTest(HttpTestCase):
                 EndpointUrlBuilderTest.TestEndpointWithUrlPathParameters,
             ])
 
-    @property
-    def extension_classes(self):
-        return [self.EndpointProvidingExtension]
+    def get_extension_classes(self):
+        return super().get_extension_classes() + [self.EndpointProvidingExtension]
 
     def testBuildWithoutParameters(self):
         sut = self._app.service('http', 'urls')
         self.assertEquals(sut.build('http_test'),
-                          'http://example.com/http/test')
+                          'http://localhost:5000/http/test')
 
     def testBuildWithParameters(self):
         sut = self._app.service('http', 'urls')
         self.assertEquals(sut.build('http_test_with_parameters', {
             'foo': 'bar',
         }),
-            'http://example.com/http/test/bar')
+            'http://localhost:5000/http/test/bar')
 
     def testBuildWithMissingParameters(self):
         sut = self._app.service('http', 'urls')

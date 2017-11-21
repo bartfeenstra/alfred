@@ -1,24 +1,86 @@
+import abc
+import json
+
 from contracts import contract
 
 from alfred.app import Factory
 from alfred.extension import AppAwareFactory
-from alfred_http.endpoints import SuccessResponse, SuccessResponseMeta, \
-    Endpoint, NonConfigurableRequestMeta, Request, RequestMeta
+from alfred_http.endpoints import Endpoint, EndpointUrlBuilder, \
+    EndpointRepository, \
+    MessageMeta, \
+    Response, SuccessResponse, SuccessResponseMeta, \
+    NonConfigurableGetRequestMeta, NonConfigurableRequest
 from alfred_rest.json import Json
+
+
+class JsonMessageMeta(MessageMeta):
+    def get_content_types(self):
+        return ['application/json']
+
+    @abc.abstractmethod
+    @contract
+    def get_json_schema(self) -> Json:
+        pass
+
+
+class JsonResponseMeta(SuccessResponseMeta, JsonMessageMeta):
+    @contract
+    def __init__(self, name: str, urls: EndpointUrlBuilder):
+        super().__init__(name)
+        self._urls = urls
+
+    def to_http_response(self, response, content_type):
+        http_response = super().to_http_response(response, content_type)
+        # @todo Validate the JSON. But we can only do that once all children are done with this method....
+        # @todo How do we do that?
+        # @todo Maybe only when debug=True, though.
+        # @todo Can this be moved to the parent class so we validate requests as well?
+        data = self.to_http_response_json_data(response, content_type).data
+        # @todo add an internal reference to the message!
+        data['$schema'] = self._urls.build('schema')
+        http_response.set_data(json.dumps(data))
+
+        return http_response
+
+    @abc.abstractmethod
+    @contract
+    def to_http_response_json_data(self, response: Response,
+                                   content_type: str) -> Json:
+        pass
 
 
 class JsonSchemaResponse(SuccessResponse):
     @contract
     def __init__(self, schema: Json):
         super().__init__()
-        self._has_data = True
-        self._data = schema.data
+        self._schema = schema
+
+    @property
+    @contract
+    def schema(self) -> Json:
+        return self._schema
 
 
-class JsonSchemaResponseMeta(SuccessResponseMeta):
-    def to_http_response(self, response):
+class JsonSchemaResponseMeta(JsonResponseMeta, AppAwareFactory):
+    @contract
+    def __init__(self, urls: EndpointUrlBuilder):
+        super().__init__('schema', urls)
+
+    @classmethod
+    def from_app(cls, app):
+        return cls(app.service('http', 'urls'))
+
+    def get_content_types(self):
+        return ['application/schema+json']
+
+    def to_http_response(self, response, content_type):
+        http_response = super().to_http_response(response, content_type)
+        http_response.status = '200'
+        return http_response
+
+    def to_http_response_json_data(self, response, content_type):
         assert isinstance(response, JsonSchemaResponse)
-        return super().to_http_response(response)
+        return response.schema
 
     def get_json_schema(self):
         return Json.from_data({
@@ -27,59 +89,30 @@ class JsonSchemaResponseMeta(SuccessResponseMeta):
         })
 
 
-class AllMessagesJsonSchemaEndpoint(Endpoint, AppAwareFactory):
-    NAME = 'schemas'
+class JsonSchemaEndpoint(Endpoint, AppAwareFactory):
+    NAME = 'schema'
 
-    def __init__(self, factory, schemas):
-        super().__init__(factory, self.NAME, 'GET', '/about/json/schema',
-                         NonConfigurableRequestMeta,
+    @contract
+    def __init__(self, factory: Factory, endpoints: EndpointRepository):
+        super().__init__(factory, self.NAME,
+                         '/about/json/schema',
+                         NonConfigurableGetRequestMeta,
                          JsonSchemaResponseMeta)
-        self._schemas = schemas
+        self._endpoints = endpoints
 
     @classmethod
     def from_app(cls, app):
-        return cls(app.factory, app.service('http', 'schemas'))
+        return cls(app.factory, app.service('http', 'endpoints'))
 
     def handle(self, request):
-        return JsonSchemaResponse(self._schemas.get_for_all_messages())
-
-
-class EndpointRequest(Request):
-    @contract
-    def __init__(self, endpoint_name: str):
-        self._endpoint_name = endpoint_name
-
-    @property
-    @contract
-    def endpoint_name(self) -> str:
-        return self._endpoint_name
-
-
-class EndpointRequestMeta(RequestMeta):
-    """
-    Defines an endpoint-specific request.
-    """
-
-    def from_http_request(self, http_request, parameters):
-        return EndpointRequest(parameters['endpoint_name'])
-
-
-class ResponseJsonSchemaEndpoint(Endpoint, AppAwareFactory):
-    NAME = 'schemas.response'
-
-    @contract
-    def __init__(self, factory: Factory, schemas):
-        super().__init__(factory, self.NAME, 'GET',
-                         '/about/json/schema/response/<endpoint_name>',
-                         EndpointRequestMeta,
-                         JsonSchemaResponseMeta)
-        self._schemas = schemas
-
-    @classmethod
-    def from_app(cls, app):
-        return cls(app.factory, app.service('http', 'schemas'))
-
-    def handle(self, request):
-        assert isinstance(request, EndpointRequest)
-        return JsonSchemaResponse(
-            self._schemas.get_for_response(request.endpoint_name))
+        assert isinstance(request, NonConfigurableRequest)
+        schema = {}
+        for request_meta in self._endpoints.get_request_metas():
+            if isinstance(request_meta, JsonMessageMeta):
+                schema['definitions/request/%s' %
+                       request_meta.name] = request_meta.get_json_schema().raw
+        for response_meta in self._endpoints.get_response_metas():
+            if isinstance(response_meta, JsonMessageMeta):
+                schema['definitions/response/%s' %
+                       response_meta.name] = response_meta.get_json_schema().raw
+        return JsonSchemaResponse(Json.from_data(schema))
