@@ -110,9 +110,9 @@ class JsonSchemaEndpoint(Endpoint, AppAwareFactory):
         for request_meta in self._endpoints.get_request_metas():
             if isinstance(request_meta, JsonMessageMeta):
                 schema['definitions/request/%s' %
-                       request_meta.name] = request_meta.get_json_schema().raw
+                       request_meta.name] = request_meta.get_json_schema().data
         for response_meta in self._endpoints.get_response_metas():
             if isinstance(response_meta, JsonMessageMeta):
                 schema['definitions/response/%s' %
-                       response_meta.name] = response_meta.get_json_schema().raw
+                       response_meta.name] = response_meta.get_json_schema().data
         return JsonSchemaResponse(Json.from_data(schema))

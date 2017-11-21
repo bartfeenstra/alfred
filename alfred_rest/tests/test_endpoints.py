@@ -16,8 +16,7 @@ class JsonSchemaEndpointTest(RestTestCase):
         schema = requests.get(
             'http://json-schema.org/draft-04/schema#').json()
         validate(spec, schema)
-        print(spec)
         endpoints = self._app.service('http', 'endpoints')
         endpoint = endpoints.get_endpoint('schema')
-        response_schema = endpoint.response_meta.get_json_schema().raw
+        response_schema = endpoint.response_meta.get_json_schema().data
         self.assertEquals(spec['definitions/response/schema'], response_schema)
