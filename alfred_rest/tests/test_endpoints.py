@@ -19,4 +19,7 @@ class JsonSchemaEndpointTest(RestTestCase):
         endpoints = self._app.service('http', 'endpoints')
         endpoint = endpoints.get_endpoint('schema')
         response_schema = endpoint.response_meta.get_json_schema().data
-        self.assertEquals(spec['definitions/response/schema'], response_schema)
+        self.assertIn('definitions', spec)
+        self.assertIn('response', spec['definitions'])
+        self.assertIn('schema', spec['definitions']['response'])
+        self.assertEquals(spec['definitions']['response']['schema'], response_schema)

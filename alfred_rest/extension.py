@@ -2,8 +2,8 @@ from alfred.app import Extension
 from alfred.extension import CoreExtension
 from alfred_http.endpoints import EndpointFactoryRepository
 from alfred_http.extension import HttpExtension
-from alfred_openapi.extension import OpenApiExtension
-from alfred_rest.endpoints import JsonSchemaEndpoint
+from alfred_rest.endpoints import JsonSchemaEndpoint, \
+    build_external_schema_endpoint
 from alfred_rest.json import Validator
 
 
@@ -14,7 +14,7 @@ class RestExtension(Extension):
 
     @staticmethod
     def dependencies():
-        return [OpenApiExtension, HttpExtension, CoreExtension]
+        return [HttpExtension, CoreExtension]
 
     @Extension.service()
     def _json_validator(self) -> Validator:
@@ -24,4 +24,5 @@ class RestExtension(Extension):
     def _endpoints(self):
         return EndpointFactoryRepository(self._app.factory, [
             JsonSchemaEndpoint,
+            build_external_schema_endpoint('json-schema', 'http://json-schema.org/draft-04/schema'),
         ])

@@ -124,18 +124,7 @@ class ResponseMeta(MessageMeta):
 
 
 class SuccessResponse(Response):
-    def __init__(self):
-        self._has_data = False
-        self._data = None
-
-    @contract
-    def has_data(self) -> bool:
-        return self._has_data
-
-    def get_data(self):
-        if not self.has_data():
-            raise LookupError('This response has no data yet.')
-        return self._data
+    pass
 
 
 class SuccessResponseMeta(ResponseMeta):

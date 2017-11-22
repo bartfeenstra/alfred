@@ -3,6 +3,7 @@ from contracts import contract
 from flask import request
 
 from alfred_http.endpoints import EndpointRepository
+from alfred_rest.endpoints import JsonMessageMeta
 
 
 class OpenApi:
@@ -48,9 +49,21 @@ class OpenApi:
                 },
             }
 
-            # @todo ReDoc fails on $ref.
-            # if isinstance(endpoint.response_meta, JsonResponseMeta):
-            #     operation['responses'][200]['schema'] = endpoint.response_meta.get_json_schema().data
+            if isinstance(endpoint.request_meta, JsonMessageMeta):
+                operation['parameters'] = [
+                    {
+                        'name': 'body',
+                        'description': 'The HTTP request body.',
+                        'in': 'body',
+                        'required': True,
+                        # @todo Convert this to a $ref.
+                        'schema': endpoint.request_meta.get_json_schema().data,
+                    },
+                ]
+
+            if isinstance(endpoint.response_meta, JsonMessageMeta):
+                # @todo Convert this to a $ref.
+                operation['responses'][200]['schema'] = endpoint.response_meta.get_json_schema().data
 
             paths_operations.setdefault(endpoint.path, {})
             paths_operations[endpoint.path].setdefault(method, {})

@@ -2,11 +2,14 @@ import json
 from typing import Optional
 
 import requests
+from contracts import contract
 from jsonschema import RefResolver, validate
 
 
 class Json:
     def __init__(self, data):
+        # Try dumping the data to ensure it is valid.
+        json.dumps(data)
         self._data = data
 
     @classmethod
@@ -26,6 +29,21 @@ class Json:
         return self._data
 
 
+@contract
+def get_schema(url: str) -> Json:
+    """
+    Gets a JSON Schema from a URL.
+    :param url:
+    :return:
+    :raises HttpError
+    """
+    response = requests.get(url, headers={
+        'Accept': 'application/schema+json; q=1, application/json; q=0.9, */*',
+    })
+    response.raise_for_status()
+    return Json.from_raw(response.text)
+
+
 class Validator:
     def validate(self, subject: Json, schema: Optional[Json] = None):
         reference_resolver = RefResolver(
@@ -37,9 +55,7 @@ class Validator:
                 raise ValueError('The JSON is not an object: %s' % message)
             if '$schema' not in data:
                 raise KeyError('No "$schema" key found: %s' % message)
-            schema = requests.get(data['$schema'], headers={
-                'Accept': 'application/schema+json; q=1, application/json; q=0.9, */*',
-            }).json()
+            _, schema = reference_resolver.resolve(data['$schema'])
         else:
             schema = schema.data
 

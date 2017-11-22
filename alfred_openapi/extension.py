@@ -3,6 +3,8 @@ from alfred_http.endpoints import EndpointFactoryRepository
 from alfred_http.extension import HttpExtension
 from alfred_openapi.endpoints import OpenApiEndpoint
 from alfred_openapi.openapi import OpenApi
+from alfred_rest.endpoints import build_external_schema_endpoint
+from alfred_rest.extension import RestExtension
 
 
 class OpenApiExtension(Extension):
@@ -12,7 +14,7 @@ class OpenApiExtension(Extension):
 
     @staticmethod
     def dependencies():
-        return [HttpExtension]
+        return [RestExtension, HttpExtension]
 
     @Extension.service()
     def _openapi(self):
@@ -22,4 +24,5 @@ class OpenApiExtension(Extension):
     def _endpoints(self):
         return EndpointFactoryRepository(self._app.factory, [
             OpenApiEndpoint,
+            build_external_schema_endpoint('openapi', 'https://raw.githubusercontent.com/OAI/OpenAPI-Specification/master/schemas/v2.0/schema.json'),
         ])

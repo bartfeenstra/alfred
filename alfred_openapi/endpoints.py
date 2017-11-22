@@ -7,8 +7,11 @@ from jinja2 import Template
 from alfred.app import Factory
 from alfred.extension import AppAwareFactory
 from alfred_http.endpoints import Endpoint, NonConfigurableRequest, \
-    NonConfigurableGetRequestMeta, SuccessResponseMeta, SuccessResponse
+    NonConfigurableGetRequestMeta, SuccessResponseMeta, SuccessResponse, \
+    EndpointUrlBuilder
 from alfred_openapi import RESOURCE_PATH
+from alfred_rest.endpoints import JsonMessageMeta
+from alfred_rest.json import Json
 
 
 class OpenApiResponse(SuccessResponse):
@@ -22,9 +25,15 @@ class OpenApiResponse(SuccessResponse):
         return self._spec
 
 
-class OpenApiResponseMeta(SuccessResponseMeta):
-    def __init__(self):
+class OpenApiResponseMeta(SuccessResponseMeta, JsonMessageMeta, AppAwareFactory):
+    @contract
+    def __init__(self, urls: EndpointUrlBuilder):
         super().__init__('openapi')
+        self._urls = urls
+
+    @classmethod
+    def from_app(cls, app):
+        return cls(app.service('http', 'urls'))
 
     def to_http_response(self, response, content_type):
         assert isinstance(response, OpenApiResponse)
@@ -48,7 +57,12 @@ class OpenApiResponseMeta(SuccessResponseMeta):
         return http_response
 
     def get_content_types(self):
-        return ['application/json', 'text/html']
+        return super().get_content_types() + ['text/html']
+
+    def get_json_schema(self):
+        return Json.from_data({
+            '$ref': self._urls.build('external-schema-openapi'),
+        })
 
 
 class OpenApiEndpoint(Endpoint, AppAwareFactory):

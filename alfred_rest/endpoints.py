@@ -2,6 +2,7 @@ import abc
 import json
 
 from contracts import contract
+from requests import HTTPError
 
 from alfred.app import Factory
 from alfred.extension import AppAwareFactory
@@ -10,7 +11,7 @@ from alfred_http.endpoints import Endpoint, EndpointUrlBuilder, \
     MessageMeta, \
     Response, SuccessResponse, SuccessResponseMeta, \
     NonConfigurableGetRequestMeta, NonConfigurableRequest
-from alfred_rest.json import Json
+from alfred_rest.json import Json, get_schema
 
 
 class JsonMessageMeta(MessageMeta):
@@ -36,8 +37,8 @@ class JsonResponseMeta(SuccessResponseMeta, JsonMessageMeta):
         # @todo Maybe only when debug=True, though.
         # @todo Can this be moved to the parent class so we validate requests as well?
         data = self.to_http_response_json_data(response, content_type).data
-        # @todo add an internal reference to the message!
-        data['$schema'] = self._urls.build('schema')
+        if '$schema' not in data:
+            data['$schema'] = '%s#definitions/response/%s' % (self._urls.build('schema'), self.name)
         http_response.set_data(json.dumps(data))
 
         return http_response
@@ -83,8 +84,10 @@ class JsonSchemaResponseMeta(JsonResponseMeta, AppAwareFactory):
         return response.schema
 
     def get_json_schema(self):
+        return Json.from_data({})
+        # @todoReDoc fails on these references somehow. Find out why, and fix it.
         return Json.from_data({
-            '$ref': 'http://json-schema.org/draft-04/schema#',
+            '$ref': self._urls.build('external-schema-json-schema'),
             'description': 'A JSON Schema.',
         })
 
@@ -106,13 +109,58 @@ class JsonSchemaEndpoint(Endpoint, AppAwareFactory):
 
     def handle(self, request):
         assert isinstance(request, NonConfigurableRequest)
-        schema = {}
+        schema = {
+            'definitions': {
+                'request': {},
+                'response': {},
+            },
+        }
         for request_meta in self._endpoints.get_request_metas():
             if isinstance(request_meta, JsonMessageMeta):
-                schema['definitions/request/%s' %
-                       request_meta.name] = request_meta.get_json_schema().data
+                schema['definitions']['request'][request_meta.name] = request_meta.get_json_schema().data
         for response_meta in self._endpoints.get_response_metas():
             if isinstance(response_meta, JsonMessageMeta):
-                schema['definitions/response/%s' %
-                       response_meta.name] = response_meta.get_json_schema().data
+                schema['definitions']['response'][response_meta.name] = response_meta.get_json_schema().data
         return JsonSchemaResponse(Json.from_data(schema))
+
+
+class ExternalJsonSchemaEndpoint(Endpoint, AppAwareFactory):
+    """
+    Provides an endpoint that proxies an external JSON Schema. This circumvents
+    Cross-Origin Resource Sharing (CORS) problems, by not requiring API clients
+    to load external resources themselves, and allows us to fix incorrect
+    headers, such as Content-Type.
+    """
+    @contract
+    def __init__(self, factory: Factory, name: str, url: str):
+        super().__init__(factory, 'external-schema-%s' % name,
+                         '/about/json/external-schema/%s' % name,
+                         NonConfigurableGetRequestMeta,
+                         JsonSchemaResponseMeta)
+        self._url = url
+        self._schema = None
+
+    @classmethod
+    def from_app(cls, app):
+        return cls(app.factory)
+
+    def handle(self, request):
+        assert isinstance(request, NonConfigurableRequest)
+        if self._schema is None:
+            try:
+                self._schema = get_schema(self._url)
+            except HTTPError:
+                # @todo We have no error handling yet!
+                # @todo Make ErrorResponse work.
+                # @todo Log these errors.
+                pass
+
+        return JsonSchemaResponse(self._schema)
+
+
+@contract
+def build_external_schema_endpoint(name: str, url: str) -> type:
+    class _Endpoint(ExternalJsonSchemaEndpoint):
+        def __init__(self, factory):
+            super().__init__(factory, name, url)
+    return _Endpoint
