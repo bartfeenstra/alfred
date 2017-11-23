@@ -1,5 +1,26 @@
+from functools import wraps
+
+
 def data_provider(data_provider):
+    """
+    Provides a test method with test data.
+
+    Applying this decorator to a test method causes that method to be run as
+    many times as the data provider callable returns dictionary items.
+    Failed assertions will include information about which data set failed.
+
+    :param data_provider: A callable that generates the test data as a
+      dictionary of tuples containing the test method arguments, keyed by data
+      set name.
+    :return:
+    """
     def decorator(test_method):
+        """
+        The actual decorator.
+        :param test_method: The test method to decorate.
+        :return:
+        """
+        @wraps(test_method)
         def multiplier(self, *test_method_args, **test_method_kwargs):
             """
             The replacement (decorated) test method.

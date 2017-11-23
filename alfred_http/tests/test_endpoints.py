@@ -236,14 +236,14 @@ class EndpointUrlBuilderTest(HttpTestCase):
     def testBuildWithoutParameters(self):
         sut = self._app.service('http', 'urls')
         self.assertEquals(sut.build('http_test'),
-                          'http://localhost:5000/http/test')
+                          'http://127.0.0.1:5000/http/test')
 
     def testBuildWithParameters(self):
         sut = self._app.service('http', 'urls')
         self.assertEquals(sut.build('http_test_with_parameters', {
             'foo': 'bar',
         }),
-            'http://localhost:5000/http/test/bar')
+            'http://127.0.0.1:5000/http/test/bar')
 
     def testBuildWithMissingParameters(self):
         sut = self._app.service('http', 'urls')

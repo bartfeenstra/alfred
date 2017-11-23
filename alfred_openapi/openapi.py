@@ -2,14 +2,15 @@ from apispec import APISpec
 from contracts import contract
 from flask import request
 
-from alfred_http.endpoints import EndpointRepository
+from alfred_http.endpoints import EndpointRepository, EndpointUrlBuilder
 from alfred_rest.endpoints import JsonMessageMeta
 
 
 class OpenApi:
     @contract
-    def __init__(self, endpoints: EndpointRepository):
+    def __init__(self, endpoints: EndpointRepository, urls: EndpointUrlBuilder):
         self._endpoints = endpoints
+        self._urls = urls
 
     @contract
     def get(self) -> APISpec:
@@ -56,14 +57,16 @@ class OpenApi:
                         'description': 'The HTTP request body.',
                         'in': 'body',
                         'required': True,
-                        # @todo Convert this to a $ref.
-                        'schema': endpoint.request_meta.get_json_schema().data,
+                        'schema': {
+                            '$ref': '%s#/definitions/request/%s' % (self._urls.build('schema'), endpoint.request_meta.name),
+                        },
                     },
                 ]
 
             if isinstance(endpoint.response_meta, JsonMessageMeta):
-                # @todo Convert this to a $ref.
-                operation['responses'][200]['schema'] = endpoint.response_meta.get_json_schema().data
+                operation['responses'][200]['schema'] = {
+                    '$ref': '%s#/definitions/response/%s' % (self._urls.build('schema'), endpoint.response_meta.name),
+                }
 
             paths_operations.setdefault(endpoint.path, {})
             paths_operations[endpoint.path].setdefault(method, {})

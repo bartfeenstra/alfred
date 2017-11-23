@@ -1,8 +1,8 @@
-from flask_cors import CORS
-
-from alfred_http.flask.app import FlaskApp
+from alfred.app import App
 from alfred_openapi.extension import OpenApiExtension
 from alfred_rest.extension import RestExtension
 
-app = FlaskApp([OpenApiExtension, RestExtension])
-CORS(app)
+alfred = App()
+alfred.add_extension(OpenApiExtension)
+alfred.add_extension(RestExtension)
+app = alfred.service('http', 'flask')

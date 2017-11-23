@@ -5,20 +5,22 @@ import requests
 from contracts import contract
 from flask import Response as HttpResponse
 
+from alfred.app import App
 from alfred_http.endpoints import Endpoint
-from alfred_http.flask.app import FlaskApp
+from alfred_http.extension import HttpExtension
 
 
 class HttpTestCase(TestCase):
     def setUp(self):
-        self._flask_app = FlaskApp(self.get_extension_classes())
-        self._flask_app.config.update(SERVER_NAME='localhost:5000')
+        self._app = App()
+        for extension in self.get_extension_classes():
+            self._app.add_extension(extension)
+        self._flask_app = self._app.service('http', 'flask')
         self._flask_app_context = self._flask_app.app_context()
         self._flask_app_context.push()
-        self._app = self._flask_app.app
 
     def get_extension_classes(self):
-        return []
+        return [HttpExtension]
 
     def tearDown(self):
         self._flask_app_context.pop()

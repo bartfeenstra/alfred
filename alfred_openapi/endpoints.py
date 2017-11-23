@@ -47,8 +47,7 @@ class OpenApiResponseMeta(SuccessResponseMeta, JsonMessageMeta, AppAwareFactory)
     def _to_html(self, http_response, response):
         template = Template(
             open(RESOURCE_PATH + '/templates/redoc.html.j2').read())
-        # @todo Use the URL builder to get the URL to this endpoint.
-        spec_url = 'http://127.0.0.1:5000/about/openapi'
+        spec_url = self._urls.build('openapi')
         http_response.set_data(template.render(spec_url=spec_url))
         return http_response
 
@@ -61,7 +60,7 @@ class OpenApiResponseMeta(SuccessResponseMeta, JsonMessageMeta, AppAwareFactory)
 
     def get_json_schema(self):
         return Json.from_data({
-            '$ref': self._urls.build('external-schema-openapi'),
+            '$ref': 'http://swagger.io/v2/schema.json#',
         })
 
 

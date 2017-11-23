@@ -1,5 +1,7 @@
-from typing import List, Optional
+from typing import List
+from urllib.parse import urlparse
 
+from contracts import contract
 from flask import Flask, request as current_http_request
 from flask.views import MethodView
 from werkzeug.exceptions import NotAcceptable
@@ -8,22 +10,18 @@ from werkzeug.local import LocalProxy
 from alfred.app import App
 from alfred_http.endpoints import Error, \
     ErrorResponse, Endpoint, Request
-from alfred_http.extension import HttpExtension
 
 
 class FlaskApp(Flask):
-    def __init__(self, extension_classes: Optional[List] = None):
+    @contract
+    def __init__(self, app: App):
         super().__init__('alfred')
-        self._app = App()
-        self._app.add_extension(HttpExtension)
-        if extension_classes is not None:
-            for extension_class in extension_classes:
-                self._app.add_extension(extension_class)
+        self._app = app
         self._register_routes()
-
-    @property
-    def app(self):
-        return self._app
+        base_url = app.service('http', 'base_url')
+        parsed_base_url = urlparse(base_url)
+        self.config.update(PREFERRED_URL_SCHEME=parsed_base_url.scheme)
+        self.config.update(SERVER_NAME=parsed_base_url.netloc)
 
     def _register_routes(self):
         endpoints = self._app.service('http', 'endpoints')
