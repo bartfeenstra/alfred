@@ -8,9 +8,11 @@ RESOURCE_PATH = '/'.join((
     'resources',
 ))
 
+
 @contract
 def base64_encodes(decoded: str) -> str:
     return base64.b64encode(bytes(decoded, 'utf-8')).decode('utf-8')
+
 
 @contract
 def base64_decodes(encoded: str) -> str:

@@ -3,3 +3,4 @@ coverage ~= 4.4.1
 flake8 ~= 3.3.0
 nose2 ~= 0.6.5
 requests ~= 2.18.4
+uwsgi ~= 2.0.15

@@ -8,7 +8,7 @@
     trap "tear_down" INT TERM EXIT
 
     cd `dirname "$0"`/..
-    FLASK_APP=./alfred_http/flask/entry_point.py python -m flask run &
+    uwsgi --http-socket 0.0.0.0:5000 -p 2 --manage-script-name --mount /=alfred_http.flask.entry_point:app &
     sleep 3
     flake8 --ignore=E501 ./alfred
     flake8 --ignore=E501 ./alfred_http

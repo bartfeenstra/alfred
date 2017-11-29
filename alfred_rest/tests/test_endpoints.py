@@ -55,4 +55,4 @@ class ExternalJsonSchemaEndpointTest(RestTestCase):
         self.assertIn('response', spec['definitions'])
         self.assertIn('schema', spec['definitions']['response'])
         self.assertEquals(spec['definitions']['response']
-                          ['external-schema'], response_schema.data)
+                          ['schema'], response_schema.data)

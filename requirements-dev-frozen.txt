@@ -19,6 +19,7 @@ marshmallow==3.0.0b4
 marshmallow-jsonschema==0.4.0
 mccabe==0.6.1
 nose2==0.6.5
+pkg-resources==0.0.0
 pycodestyle==2.3.1
 PyContracts==1.8.0
 pyflakes==1.5.0
@@ -27,4 +28,5 @@ PyYAML==3.12
 requests==2.18.4
 six==1.11.0
 urllib3==1.22
+uWSGI==2.0.15
 Werkzeug==0.12.2
