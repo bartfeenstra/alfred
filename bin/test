@@ -2,7 +2,7 @@
 
 (
     tear_down() {
-        trap - TERM
+        trap - INT TERM EXIT
         kill -- -$$
     }
     trap "tear_down" INT TERM EXIT
@@ -23,10 +23,8 @@
     coverage run -m nose2
     coverage report -m
 
-    # The tear_down trap works if the script is exited from outside or due to
-    # an error. If the script completes without script failures (tests may
-    # fail), we want to exit with the aggregated status of the tests, and *not*
-    # with the exit code of stopped background processes, caused by the trap.
-    trap - INT TERM EXIT
+    # Trigger tear-down explicitly, so the traps are removed, and we can exit
+    # with the aggregated test exit code.
+    tear_down
     exit $exit_code
 )
