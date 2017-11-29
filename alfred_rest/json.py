@@ -39,7 +39,7 @@ def get_schema(url: str) -> Json:
     Gets a JSON Schema from a URL.
     :param url:
     :return:
-    :raises HttpError
+    :raises requests.HTTPError
     """
     response = requests.get(url, headers={
         'Accept': 'application/schema+json; q=1, application/json; q=0.9, */*',

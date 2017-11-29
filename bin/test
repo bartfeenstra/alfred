@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
 (
     tear_down() {
@@ -10,11 +10,23 @@
     cd `dirname "$0"`/..
     uwsgi --http-socket 0.0.0.0:5000 -p 2 --manage-script-name --mount /=alfred_http.flask.entry_point:app &
     sleep 3
+
+    # Aggregate test exit codes.
+    exit_code=0
+    trap '(( exit_code |= $? ))' ERR
+
     flake8 --ignore=E501 ./alfred
     flake8 --ignore=E501 ./alfred_http
     flake8 --ignore=E501 ./alfred_manor
     flake8 --ignore=E501 ./alfred_openapi
     flake8 --ignore=E501 ./alfred_rest
-    coverage run -m nose2 &&
+    coverage run -m nose2
     coverage report -m
+
+    # The tear_down trap works if the script is exited from outside or due to
+    # an error. If the script completes without script failures (tests may
+    # fail), we want to exit with the aggregated status of the tests, and *not*
+    # with the exit code of stopped background processes, caused by the trap.
+    trap - INT TERM EXIT
+    exit $exit_code
 )

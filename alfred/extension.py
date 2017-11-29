@@ -35,7 +35,6 @@ class AppAwareCallableFactory(Factory):
             raise FactoryError(
                 'Fix the following error that occurs when %s() is called: %s' %
                 (spec, e))
-        pass
 
 
 class AppAwareClassFactory(Factory):
@@ -55,7 +54,6 @@ class AppAwareClassFactory(Factory):
             raise FactoryError(
                 'Fix the following error that occurs in %s.from_app(): %s' %
                 (qualname(spec), e))
-        pass
 
 
 class CoreExtension(Extension):

@@ -78,7 +78,6 @@ class CallableFactory(Factory):
             raise FactoryError(
                 'Fix the following error that occurs when %s() is called:\n%s' %
                 (spec, indent(traceback.format_exc())))
-        pass
 
 
 class ClassFactory(Factory):
@@ -92,7 +91,6 @@ class ClassFactory(Factory):
             raise FactoryError(
                 "Fix the following error that occurs in %s.__init__():\n%s" %
                 (qualname(spec), indent(traceback.format_exc())))
-        pass
 
 
 class MultipleFactories(Factory):
@@ -320,11 +318,6 @@ class App:
         self._services.setdefault(service_definition.extension_name, {})
         self._services[service_definition.extension_name][
             service_definition.name] = service
-
-    @property
-    @contract
-    def extensions(self) -> Iterable:
-        return list(self._extensions.values())
 
     def add_extension(self, extension_class: type):
         assert issubclass(extension_class, Extension)
