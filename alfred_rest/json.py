@@ -95,7 +95,6 @@ class Rewriter:
 
         original_parts = urlsplit(pointer)
         # Check if the schema is external and has an absolute URL.
-        # @todo MAKE SURE THEY DO NOT ALREADY POINT TO ALFRED. CAN WE MATCH ON BASE URL? DO WE EVEN *KNOW* THE BASE URL?
         if original_parts[0] is not None and original_parts.netloc:
             # Rewrite the reference to point to this endpoint.
             fragment = original_parts[4]
