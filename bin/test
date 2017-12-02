@@ -2,13 +2,15 @@
 
 (
     tear_down() {
-        trap - INT TERM EXIT
-        kill -- -$$
+        echo "Ending backgound processes..."
+        jobs -rp | xargs kill -INT
+        wait $(jobs -rp) 2>/dev/null
     }
-    trap "tear_down" INT TERM EXIT
+    trap "tear_down" INT TERM
 
     cd `dirname "$0"`/..
-    uwsgi --http-socket 0.0.0.0:5000 -p 2 --manage-script-name --mount /=alfred_http.flask.entry_point:app &
+    echo "Starting web server..."
+    uwsgi --http-socket 0.0.0.0:5000 -p 4 --manage-script-name --master --no-orphans --mount /=alfred_http.flask.entry_point:app &>/dev/null &
     sleep 3
 
     # Aggregate test exit codes.
@@ -23,8 +25,9 @@
     coverage run -m nose2
     coverage report -m
 
-    # Trigger tear-down explicitly, so the traps are removed, and we can exit
-    # with the aggregated test exit code.
+    # Stop aggregating test exit codes.
+    trap - ERR
+
     tear_down
     exit $exit_code
 )
