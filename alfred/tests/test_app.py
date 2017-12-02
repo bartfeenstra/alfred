@@ -1,7 +1,8 @@
 from unittest import TestCase
 
 from alfred.app import ClassFactory, FactoryError, CallableFactory, \
-    MultipleFactories, App, Factory, Extension
+    MultipleFactories, App, Factory, Extension, ExtensionNotFound, \
+    ServiceNotFound
 
 
 class CallableFactoryTest(TestCase):
@@ -117,3 +118,13 @@ class AppTest(TestCase):
         sut.add_extension(self.TestExtension)
         with self.assertRaises(FactoryError):
             sut.service('test', 'foo')
+
+    def testServiceWithNonExistentExtension(self):
+        sut = App()
+        with self.assertRaises(ExtensionNotFound):
+            sut.service('i_do_not_exist', 'factory')
+
+    def testServiceWithNonExistentService(self):
+        sut = App()
+        with self.assertRaises(ServiceNotFound):
+            sut.service('core', 'i_do_not_exist')
