@@ -2,11 +2,11 @@
 
 tear_down() {
     echo "Ending background processes..."
-    trap - INT TERM
+    trap - EXIT
     jobs -rp | xargs kill -INT
     wait $(jobs -rp) 2>/dev/null
 }
-trap "tear_down" INT TERM
+trap "tear_down" EXIT
 
 cd `dirname "$0"`/..
 echo "Starting web server..."

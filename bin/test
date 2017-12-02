@@ -2,16 +2,16 @@
 
 tear_down() {
     echo "Ending background processes..."
-    trap - INT TERM
+    trap - EXIT
     jobs -rp | xargs kill -INT
     wait $(jobs -rp) 2>/dev/null
 }
-trap "tear_down" INT TERM
+trap "tear_down" EXIT
 
 cd `dirname "$0"`/..
 
-# Start the web server.
-./bin/run-dev &
+echo "Starting web server..."
+uwsgi --http-socket 0.0.0.0:5000 -p 4 --manage-script-name --master --no-orphans --mount /=alfred_http.flask.entry_point:app &
 sleep 3
 
 # Aggregate test exit codes.
