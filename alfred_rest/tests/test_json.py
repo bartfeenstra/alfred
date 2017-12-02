@@ -4,7 +4,7 @@ import requests_mock
 from requests import HTTPError
 
 from alfred.tests import expand_data, data_provider
-from alfred_rest.json import Json, get_schema
+from alfred_rest.json import Json, get_schema, Validator
 from alfred_rest.tests import RestTestCase
 
 
@@ -83,7 +83,22 @@ class GetSchemaTest(RestTestCase):
 
 
 class ValidatorTest(RestTestCase):
-    pass
+    def testWithExpectedObjectShouldFailOnNonObject(self):
+        validator = Validator()
+        with self.assertRaises(ValueError):
+            validator.validate(Json.from_data('Foo'))
+
+    def testWithExpectedObjectShouldFailOnMissingSchemaKey(self):
+        validator = Validator()
+        with self.assertRaises(KeyError):
+            validator.validate(Json.from_data({}))
+
+    def testSuccess(self):
+        validator = Validator()
+        data = Json.from_data({
+            'fruit_name': 'Apple',
+        })
+        validator.validate(data, Json.from_data(SCHEMA))
 
 
 class RewriterTest(RestTestCase):
