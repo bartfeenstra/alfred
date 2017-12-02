@@ -1,12 +1,10 @@
 from unittest import TestCase
-from unittest.mock import Mock
 
 import requests_mock
 from requests import HTTPError
 
 from alfred.tests import expand_data, data_provider
-from alfred_http.endpoints import EndpointUrlBuilder
-from alfred_rest.json import Json, get_schema, Validator, Rewriter
+from alfred_rest.json import Json, get_schema, Validator
 from alfred_rest.tests import RestTestCase
 
 
@@ -115,11 +113,13 @@ class RewriterTest(RestTestCase):
 
     def testRewritePointerWithInternalPointerShouldPassThrough(self):
         sut = self._app.service('rest', 'json_reference_rewriter')
-        self.assertEqual(sut.rewrite_pointer(self.INTERNAL_POINTER), self.INTERNAL_POINTER)
+        self.assertEqual(sut.rewrite_pointer(
+            self.INTERNAL_POINTER), self.INTERNAL_POINTER)
 
     def testRewritePointerWithExternalPointerShouldBeRewritten(self):
         sut = self._app.service('rest', 'json_reference_rewriter')
-        self.assertEqual(sut.rewrite_pointer(self.ORIGINAL_POINTER), self.REWRITTEN_POINTER)
+        self.assertEqual(sut.rewrite_pointer(
+            self.ORIGINAL_POINTER), self.REWRITTEN_POINTER)
 
     def testRewrite(self):
         original_schema = Json.from_data({
@@ -157,4 +157,3 @@ class RewriterTest(RestTestCase):
         sut = self._app.service('rest', 'json_reference_rewriter')
         sut.rewrite(original_schema)
         self.assertEqual(original_schema.data, rewritten_schema.data)
-
