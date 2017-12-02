@@ -1,33 +1,33 @@
 #!/usr/bin/env bash
 
-(
-    tear_down() {
-        echo "Ending backgound processes..."
-        jobs -rp | xargs kill -INT
-        wait $(jobs -rp) 2>/dev/null
-    }
-    trap "tear_down" INT TERM
+tear_down() {
+    echo "Ending background processes..."
+    trap - INT TERM
+    jobs -rp | xargs kill -INT
+    wait $(jobs -rp) 2>/dev/null
+}
+trap "tear_down" INT TERM
 
-    cd `dirname "$0"`/..
-    echo "Starting web server..."
-    uwsgi --http-socket 0.0.0.0:5000 -p 4 --manage-script-name --master --no-orphans --mount /=alfred_http.flask.entry_point:app &>/dev/null &
-    sleep 3
+cd `dirname "$0"`/..
 
-    # Aggregate test exit codes.
-    exit_code=0
-    trap '(( exit_code |= $? ))' ERR
+# Start the web server.
+./bin/run-dev &
+sleep 3
 
-    flake8 --ignore=E501 ./alfred
-    flake8 --ignore=E501 ./alfred_http
-    flake8 --ignore=E501 ./alfred_manor
-    flake8 --ignore=E501 ./alfred_openapi
-    flake8 --ignore=E501 ./alfred_rest
-    coverage run -m nose2
-    coverage report -m
+# Aggregate test exit codes.
+exit_code=0
+trap '(( exit_code |= $? ))' ERR
 
-    # Stop aggregating test exit codes.
-    trap - ERR
+flake8 --ignore=E501 ./alfred
+flake8 --ignore=E501 ./alfred_http
+flake8 --ignore=E501 ./alfred_manor
+flake8 --ignore=E501 ./alfred_openapi
+flake8 --ignore=E501 ./alfred_rest
+coverage run -m nose2
+coverage report -m
 
-    tear_down
-    exit $exit_code
-)
+# Stop aggregating test exit codes.
+trap - ERR
+
+tear_down
+exit $exit_code

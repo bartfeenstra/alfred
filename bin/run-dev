@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 
-(
-    tear_down() {
-        echo "Ending backgound processes..."
-        jobs -rp | xargs kill -INT
-        wait $(jobs -rp) 2>/dev/null
-    }
-    trap "tear_down" INT TERM
+tear_down() {
+    echo "Ending background processes..."
+    trap - INT TERM
+    jobs -rp | xargs kill -INT
+    wait $(jobs -rp) 2>/dev/null
+}
+trap "tear_down" INT TERM
 
-    cd `dirname "$0"`/..
-    echo "Starting web server..."
-    uwsgi --http-socket 0.0.0.0:5000 -p 4 --manage-script-name --master --no-orphans --mount /=alfred_http.flask.entry_point:app &
-    sleep infinity
-)
+cd `dirname "$0"`/..
+echo "Starting web server..."
+uwsgi --http-socket 0.0.0.0:5000 -p 4 --manage-script-name --master --no-orphans --mount /=alfred_http.flask.entry_point:app &
+sleep infinity
