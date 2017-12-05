@@ -75,7 +75,7 @@ class JsonSchemaResponseMeta(JsonResponseMeta, AppAwareFactory):
     @classmethod
     def from_app(cls, app):
         return cls(app.service('http', 'urls'),
-                   app.service('rest', 'json_reference_rewriter'))
+                   app.service('rest', 'json_schema_rewriter'))
 
     def get_content_types(self):
         return ['application/schema+json']
@@ -159,7 +159,7 @@ class ExternalJsonSchemaRequest(Request):
         return self._schema_url
 
 
-class ExternalJsonSchemaEndpoint(Endpoint, AppAwareFactory):
+class ExternalJsonSchemaReferenceProxyEndpoint(Endpoint, AppAwareFactory):
     """
     Provides an endpoint that proxies an external JSON Schema. This circumvents
     Cross-Origin Resource Sharing (CORS) problems, by not requiring API clients
