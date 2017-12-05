@@ -1,12 +1,13 @@
+from copy import copy
 from unittest import TestCase
 
 import requests_mock
 from requests import HTTPError
 
 from alfred.tests import expand_data, data_provider
-from alfred_rest.json import Json, get_schema, Validator
+from alfred_rest.json import Json, get_schema, Validator, \
+    InternalReferenceAggregator, DataType
 from alfred_rest.tests import RestTestCase
-
 
 SCHEMA = {
     'type': 'object',
@@ -28,7 +29,9 @@ def provide_4xx_codes():
     Returns the HTTP 4xx codes.
     See data_provider().
     """
-    return expand_data(list(range(400, 418)) + list(range(421, 424)) + [426, 428, 429, 431, 451])
+    return expand_data(
+        list(range(400, 418)) + list(range(421, 424)) + [426, 428, 429, 431,
+                                                         451])
 
 
 def provide_5xx_codes():
@@ -57,7 +60,7 @@ class JsonTest(TestCase):
         self.assertEqual(Json.from_raw(raw).raw, raw)
 
 
-class GetSchemaTest(RestTestCase):
+class GetSchemaTest(TestCase):
     @requests_mock.mock()
     def testSuccess(self, m):
         url = 'https://example.com/the_schema_path'
@@ -82,7 +85,7 @@ class GetSchemaTest(RestTestCase):
             get_schema(url)
 
 
-class ValidatorTest(RestTestCase):
+class ValidatorTest(TestCase):
     def testWithExpectedObjectShouldFailOnNonObject(self):
         validator = Validator()
         with self.assertRaises(ValueError):
@@ -101,23 +104,140 @@ class ValidatorTest(RestTestCase):
         validator.validate(data, Json.from_data(SCHEMA))
 
 
-class RewriterTest(RestTestCase):
+class InternalReferenceAggregatorTest(TestCase):
+    def testRewriteWithoutReferenes(self):
+        sut = InternalReferenceAggregator()
+        original_schema = Json.from_data({
+            'id': 'https://example.com/schema',
+            'foo': {
+                '$ref': 'https://example.com/schema#',
+            },
+            'bar': {
+                'oneOf': [
+                    {
+                        '$schema': 'https://example.com/schema#'
+                    },
+                ],
+            },
+        })
+        rewritten_schema = copy(original_schema)
+        sut.rewrite(original_schema)
+        self.assertEqual(original_schema.data, rewritten_schema.data)
+
+    def testRewriteSimpleReference(self):
+        sut = InternalReferenceAggregator()
+        original_schema = Json.from_data({
+            'id': 'https://example.com/schema',
+            'foo': DataType('Foo', Json.from_data({
+                'type': 'float',
+            })),
+        })
+        expected_schema = Json.from_data({
+            'id': 'https://example.com/schema',
+            'foo': {
+                '$ref': '#/definitions/data/Foo',
+            },
+            'definitions': {
+                'data': {
+                    'Foo': {
+                        'type': 'float',
+                    },
+                },
+            },
+        })
+        rewritten_schema = sut.rewrite(original_schema)
+        self.assertEqual(rewritten_schema.data, expected_schema.data)
+
+    def testRewriteNestedReferences(self):
+        sut = InternalReferenceAggregator()
+        original_schema = Json.from_data({
+            'id': 'https://example.com/schema',
+            'foo': DataType('Foo', Json.from_data({
+                'type': 'float',
+            })),
+            'bar': {
+                'type': 'object',
+                'properties': {
+                    'baz': DataType('Baz', Json.from_data({
+                        'type': 'string',
+                    })),
+                },
+            },
+        })
+        expected_schema = Json.from_data({
+            'id': 'https://example.com/schema',
+            'foo': {
+                '$ref': '#/definitions/data/Foo',
+            },
+            'bar': {
+                'type': 'object',
+                'properties': {
+                    'baz': {
+                        '$ref': '#/definitions/data/Baz',
+                    },
+                },
+            },
+            'definitions': {
+                'data': {
+                    'Foo': {
+                        'type': 'float',
+                    },
+                    'Baz': {
+                        'type': 'string',
+                    },
+                },
+            },
+        })
+        rewritten_schema = sut.rewrite(original_schema)
+        self.assertEqual(rewritten_schema.data, expected_schema.data)
+
+    def testRewriteDuplicateReferences(self):
+        sut = InternalReferenceAggregator()
+        data_type = DataType('Foo', Json.from_data({
+            'type': 'float',
+        }))
+        original_schema = Json.from_data({
+            'id': 'https://example.com/schema',
+            'foo': data_type,
+            'foo2': data_type,
+        })
+        expected_schema = Json.from_data({
+            'id': 'https://example.com/schema',
+            'foo': {
+                '$ref': '#/definitions/data/Foo',
+            },
+            'foo2': {
+                '$ref': '#/definitions/data/Foo',
+            },
+            'definitions': {
+                'data': {
+                    'Foo': {
+                        'type': 'float',
+                    },
+                },
+            },
+        })
+        rewritten_schema = sut.rewrite(original_schema)
+        self.assertEqual(rewritten_schema.data, expected_schema.data)
+
+
+class ExternalReferenceProxyTest(RestTestCase):
     ORIGINAL_POINTER = 'http://json-schema.org/draft-04/schema#'
     REWRITTEN_POINTER = 'http://127.0.0.1:5000/about/json/external-schema/aHR0cDovL2pzb24tc2NoZW1hLm9yZy9kcmFmdC0wNC9zY2hlbWE%3D'
     INTERNAL_POINTER = 'http://127.0.0.1:5000/foo/bar/BAZ'
 
     def testRewritePointerWithNonStringShouldPassThrough(self):
         pointer = {}
-        sut = self._app.service('rest', 'json_reference_rewriter')
+        sut = self._app.service('rest', 'external_reference_proxy')
         self.assertEqual(sut.rewrite_pointer(pointer), pointer)
 
     def testRewritePointerWithInternalPointerShouldPassThrough(self):
-        sut = self._app.service('rest', 'json_reference_rewriter')
+        sut = self._app.service('rest', 'external_reference_proxy')
         self.assertEqual(sut.rewrite_pointer(
             self.INTERNAL_POINTER), self.INTERNAL_POINTER)
 
     def testRewritePointerWithExternalPointerShouldBeRewritten(self):
-        sut = self._app.service('rest', 'json_reference_rewriter')
+        sut = self._app.service('rest', 'external_reference_proxy')
         self.assertEqual(sut.rewrite_pointer(
             self.ORIGINAL_POINTER), self.REWRITTEN_POINTER)
 
@@ -154,6 +274,6 @@ class RewriterTest(RestTestCase):
                 ],
             },
         })
-        sut = self._app.service('rest', 'json_reference_rewriter')
+        sut = self._app.service('rest', 'external_reference_proxy')
         sut.rewrite(original_schema)
         self.assertEqual(original_schema.data, rewritten_schema.data)

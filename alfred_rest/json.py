@@ -1,13 +1,14 @@
-import base64
+import abc
 import json
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List
 from urllib.parse import urlunsplit, urlsplit
 
 import requests
-from contracts import contract
+from contracts import contract, ContractsMeta, with_metaclass
 from jsonschema import RefResolver, validate
 
 from alfred_http.endpoints import EndpointUrlBuilder
+from alfred_rest import base64_encodes
 
 
 class Json:
@@ -31,6 +32,49 @@ class Json:
     @property
     def data(self):
         return self._data
+
+
+class InternalReference(dict):
+    @contract
+    def __init__(self, type: str, name: str, schema: Json):
+        super().__init__()
+        self.update(schema.data)
+        self._type = type
+        self._name = name
+
+    @property
+    @contract
+    def type(self) -> str:
+        return self._type
+
+    @property
+    @contract
+    def name(self) -> str:
+        return self._name
+
+    @property
+    @contract
+    def schema(self) -> Json:
+        return Json.from_data(self)
+
+
+class DataType(InternalReference):
+    def __init__(self, name: str, schema: Json):
+        super().__init__('data', name, schema)
+
+
+class RequestType(InternalReference):
+    def __init__(self, name: str, schema: Json):
+        super().__init__('request', name, schema)
+
+
+class ResponseType(InternalReference):
+    def __init__(self, name: str, schema: Json):
+        super().__init__('response', name, schema)
+
+
+class JsonSchema(Json):
+    pass
 
 
 @contract
@@ -66,7 +110,57 @@ class Validator:
         validate(data, schema)
 
 
-class Rewriter:
+class Rewriter(with_metaclass(ContractsMeta)):
+    @abc.abstractmethod
+    @contract
+    def rewrite(self, schema: Json) -> Json:
+        pass
+
+
+class InternalReferenceAggregator(Rewriter):
+    """
+    Rewrites a JSON Schema's InternalReferences.
+    """
+
+    @contract
+    def _rewrite_reference(self, reference: InternalReference, definitions: Dict):
+        """
+        Rewrites a JSON Schema's InternalReferences.
+        """
+        definitions.setdefault(reference.type, {})
+        if reference.name not in definitions[reference.type]:
+            definitions[reference.type][
+                reference.name] = reference.schema.data
+        return {
+            '$ref': '#/definitions/%s/%s' % (reference.type,
+                                             reference.name),
+        }, definitions
+
+    def rewrite(self, schema):
+        data, definitions = self._rewrite(schema.data, {})
+        # There is no reason we should omit empty definitions, except that
+        #  existing code does not always expect them.
+        if len(definitions) and len([x for x in definitions if len(x)]):
+            data.setdefault('definitions', {})
+            data['definitions'].update(definitions)
+        return Json.from_data(data)
+
+    @contract
+    def _rewrite(self, data, definitions: Dict):
+        if isinstance(data, InternalReference):
+            return self._rewrite_reference(data, definitions)
+        if isinstance(data, List):
+            for index, item in enumerate(data):
+                data[index], definitions = self._rewrite(item, definitions)
+            return data, definitions
+        elif isinstance(data, Dict):
+            for key, item in data.items():
+                data[key], definitions = self._rewrite(item, definitions)
+            return data, definitions
+        return data, definitions
+
+
+class ExternalReferenceProxy(Rewriter):
     """
     Rewrites JSON Schemas to proxy references through
     ExternalJsonSchemaEndpoint.
@@ -79,7 +173,7 @@ class Rewriter:
         self._base_url = base_url
         self._urls = urls
 
-    def rewrite_pointer(self, pointer: Any) -> Any:
+    def rewrite_pointer(self, pointer):
         """
         Rewrites a JSON pointer in "id", "$ref", and "$schema" keys.
         :param pointer: Any
@@ -101,8 +195,7 @@ class Rewriter:
             decoded_original_parts = original_parts[:4] + (
                 None,) + original_parts[5:]
             decoded_original = urlunsplit(decoded_original_parts)
-            encoded_original = base64.b64encode(
-                bytes(decoded_original, 'utf-8')).decode('utf-8')
+            encoded_original = base64_encodes(decoded_original)
             new_url = self._urls.build('external-schema', {
                 'id': encoded_original,
             })
@@ -111,27 +204,40 @@ class Rewriter:
             new_url = urlunsplit(new_parts)
             return new_url
 
-    @contract
     def rewrite(self, schema: Json):
-        """
-        Rewrites a JSON Schema's pointers.
-        :param schema:
-        :return:
-        """
-        self._rewrite(schema.data)
-        if 'id' in schema.data:
-            schema.data['id'] = self.rewrite_pointer(schema.data['id'])
+        data = self._rewrite(schema.data)
+        if isinstance(schema.data, Dict) and 'id' in schema.data:
+            data['id'] = self.rewrite_pointer(schema.data['id'])
+        return Json.from_data(data)
 
-    def _rewrite(self, schema):
-        if isinstance(schema, List):
-            for item in schema:
+    def _rewrite(self, data):
+        if isinstance(data, List):
+            for item in data:
                 # Traverse child elements.
                 self._rewrite(item)
-        elif isinstance(schema, Dict):
-            for key in schema:
+            return data
+        elif isinstance(data, Dict):
+            for key in data:
                 if key in self._REWRITE_KEYS:
-                    schema[key] = self.rewrite_pointer(schema[key])
+                    data[key] = self.rewrite_pointer(data[key])
 
                 # Traverse child elements.
                 else:
-                    self._rewrite(schema[key])
+                    data[key] = self._rewrite(data[key])
+            return data
+        return data
+
+
+class NestedRewriter(Rewriter):
+    def __init__(self):
+        super().__init__()
+        self._rewriters = []
+
+    @contract
+    def add_rewriter(self, rewriter: Rewriter):
+        self._rewriters.append(rewriter)
+
+    def rewrite(self, schema):
+        for rewriter in self._rewriters:
+            schema = rewriter.rewrite(schema)
+        return schema
