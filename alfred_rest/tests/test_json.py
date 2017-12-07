@@ -6,7 +6,7 @@ from requests import HTTPError
 
 from alfred.tests import expand_data, data_provider
 from alfred_rest.json import Json, get_schema, Validator, \
-    InternalReferenceAggregator, DataType
+    InternalReferenceAggregator, DataType, Rewriter, NestedRewriter
 from alfred_rest.tests import RestTestCase
 
 SCHEMA = {
@@ -222,14 +222,20 @@ class InternalReferenceAggregatorTest(TestCase):
 
 
 class ExternalReferenceProxyTest(RestTestCase):
-    ORIGINAL_POINTER = 'http://json-schema.org/draft-04/schema#'
-    REWRITTEN_POINTER = 'http://127.0.0.1:5000/about/json/external-schema/aHR0cDovL2pzb24tc2NoZW1hLm9yZy9kcmFmdC0wNC9zY2hlbWE%3D'
-    INTERNAL_POINTER = 'http://127.0.0.1:5000/foo/bar/BAZ'
+    ORIGINAL_EXTERNAL_POINTER = 'http://json-schema.org/draft-04/schema#'
+    REWRITTEN_EXTERNAL_POINTER = 'http://127.0.0.1:5000/about/json/external-schema/aHR0cDovL2pzb24tc2NoZW1hLm9yZy9kcmFmdC0wNC9zY2hlbWE%3D'
+    ALFRED_POINTER = 'http://127.0.0.1:5000/about/json/schema#definitions/data/Foo'
+    INTERNAL_POINTER = '/#definitions/data/Bar'
 
     def testRewritePointerWithNonStringShouldPassThrough(self):
         pointer = {}
         sut = self._app.service('rest', 'external_reference_proxy')
         self.assertEqual(sut.rewrite_pointer(pointer), pointer)
+
+    def testRewritePointerWithAlfredPointerShouldPassThrough(self):
+        sut = self._app.service('rest', 'external_reference_proxy')
+        self.assertEqual(sut.rewrite_pointer(
+            self.ALFRED_POINTER), self.ALFRED_POINTER)
 
     def testRewritePointerWithInternalPointerShouldPassThrough(self):
         sut = self._app.service('rest', 'external_reference_proxy')
@@ -239,41 +245,74 @@ class ExternalReferenceProxyTest(RestTestCase):
     def testRewritePointerWithExternalPointerShouldBeRewritten(self):
         sut = self._app.service('rest', 'external_reference_proxy')
         self.assertEqual(sut.rewrite_pointer(
-            self.ORIGINAL_POINTER), self.REWRITTEN_POINTER)
+            self.ORIGINAL_EXTERNAL_POINTER), self.REWRITTEN_EXTERNAL_POINTER)
 
     def testRewrite(self):
         original_schema = Json.from_data({
-            'id': self.ORIGINAL_POINTER,
+            'id': self.ORIGINAL_EXTERNAL_POINTER,
             'foo': {
-                '$ref': self.ORIGINAL_POINTER,
+                '$ref': self.ORIGINAL_EXTERNAL_POINTER,
             },
             'bar': {
-                '$ref': self.INTERNAL_POINTER,
+                '$ref': self.ALFRED_POINTER,
             },
             'baz': {
+                '$ref': self.INTERNAL_POINTER,
+            },
+            'qux': {
                 'oneOf': [
                     {
-                        '$schema': self.ORIGINAL_POINTER
+                        '$schema': self.ORIGINAL_EXTERNAL_POINTER
                     },
                 ],
             },
         })
-        rewritten_schema = Json.from_data({
-            'id': self.REWRITTEN_POINTER,
+        expected_schema = Json.from_data({
+            'id': self.REWRITTEN_EXTERNAL_POINTER,
             'foo': {
-                '$ref': self.REWRITTEN_POINTER,
+                '$ref': self.REWRITTEN_EXTERNAL_POINTER,
             },
             'bar': {
-                '$ref': self.INTERNAL_POINTER,
+                '$ref': self.ALFRED_POINTER,
             },
             'baz': {
+                '$ref': self.INTERNAL_POINTER,
+            },
+            'qux': {
                 'oneOf': [
                     {
-                        '$schema': self.REWRITTEN_POINTER
+                        '$schema': self.REWRITTEN_EXTERNAL_POINTER
                     },
                 ],
             },
         })
         sut = self._app.service('rest', 'external_reference_proxy')
-        sut.rewrite(original_schema)
-        self.assertEqual(original_schema.data, rewritten_schema.data)
+        rewritten_schema = sut.rewrite(original_schema)
+        self.assertEqual(rewritten_schema.data, expected_schema.data)
+
+
+class NestedRewriterTest(RestTestCase):
+    class DogRewriter(Rewriter):
+        def rewrite(self, schema: Json):
+            schema.data['required'].append('woof')
+            return schema
+
+    class CatRewriter(Rewriter):
+        def rewrite(self, schema: Json):
+            schema.data['required'].append('meow')
+            return schema
+
+    def testRewritePointerWithNonStringShouldPassThrough(self):
+        sut = NestedRewriter()
+        sut.add_rewriter(self.DogRewriter())
+        sut.add_rewriter(self.CatRewriter())
+        original_schema = Json.from_data({
+            'type': 'object',
+            'required': [],
+        })
+        expected_schema = Json.from_data({
+            'type': 'object',
+            'required': ['woof', 'meow'],
+        })
+        rewritten_schema = sut.rewrite(original_schema)
+        self.assertEqual(rewritten_schema.data, expected_schema.data)

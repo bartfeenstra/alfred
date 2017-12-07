@@ -1,6 +1,6 @@
 import abc
 import json
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Tuple
 from urllib.parse import urlunsplit, urlsplit
 
 import requests
@@ -61,6 +61,11 @@ class InternalReference(dict):
 class DataType(InternalReference):
     def __init__(self, name: str, schema: Json):
         super().__init__('data', name, schema)
+
+    @abc.abstractmethod
+    @contract
+    def to_json(self, resource) -> Json:
+        pass
 
 
 class RequestType(InternalReference):
@@ -123,7 +128,7 @@ class InternalReferenceAggregator(Rewriter):
     """
 
     @contract
-    def _rewrite_reference(self, reference: InternalReference, definitions: Dict):
+    def _rewrite_reference(self, reference: InternalReference, definitions: Dict) -> Tuple:
         """
         Rewrites a JSON Schema's InternalReferences.
         """
@@ -146,7 +151,7 @@ class InternalReferenceAggregator(Rewriter):
         return Json.from_data(data)
 
     @contract
-    def _rewrite(self, data, definitions: Dict):
+    def _rewrite(self, data, definitions: Dict) -> Tuple:
         if isinstance(data, InternalReference):
             return self._rewrite_reference(data, definitions)
         if isinstance(data, List):
@@ -203,6 +208,8 @@ class ExternalReferenceProxy(Rewriter):
             new_parts = new_parts[:4] + (fragment,) + new_parts[5:]
             new_url = urlunsplit(new_parts)
             return new_url
+
+        return pointer
 
     def rewrite(self, schema: Json):
         data = self._rewrite(schema.data)
