@@ -1,5 +1,6 @@
 import abc
 import json
+from copy import copy
 from typing import Optional, Dict, List, Tuple
 from urllib.parse import urlunsplit, urlsplit
 
@@ -34,33 +35,17 @@ class Json:
         return self._data
 
 
-class InternalReference(dict):
+class DataType(dict):
     @contract
-    def __init__(self, type: str, name: str, schema: Json):
+    def __init__(self, schema: Json):
         super().__init__()
         self.update(schema.data)
-        self._type = type
-        self._name = name
-
-    @property
-    @contract
-    def type(self) -> str:
-        return self._type
-
-    @property
-    @contract
-    def name(self) -> str:
-        return self._name
+        self._schema = schema
 
     @property
     @contract
     def schema(self) -> Json:
-        return Json.from_data(self)
-
-
-class DataType(InternalReference):
-    def __init__(self, name: str, schema: Json):
-        super().__init__('data', name, schema)
+        return self._schema
 
     @abc.abstractmethod
     @contract
@@ -68,14 +53,43 @@ class DataType(InternalReference):
         pass
 
 
-class RequestType(InternalReference):
-    def __init__(self, name: str, schema: Json):
-        super().__init__('request', name, schema)
+class ListType(DataType):
+    @contract
+    def __init__(self, data_type: DataType):
+        super().__init__(Json.from_data({
+            'type': 'array',
+            'items': data_type,
+        }))
+        self._data_type = data_type
+
+    def to_json(self, resource):
+        data = []
+        for item in resource:
+            data.append(self._data_type.to_json(item))
+        return data
 
 
-class ResponseType(InternalReference):
-    def __init__(self, name: str, schema: Json):
-        super().__init__('response', name, schema)
+class IdentifiableDataType(DataType):
+    """
+    These are JSON Schemas that provide metadata so they can be aggregated and
+    re-used throughout a schema. See InternalReferenceAggregator.
+    """
+
+    @contract
+    def __init__(self, schema: Json, name: str, group_name: str = 'data'):
+        super().__init__(schema)
+        self._group_name = group_name
+        self._name = name
+
+    @property
+    @contract
+    def group_name(self) -> str:
+        return self._group_name
+
+    @property
+    @contract
+    def name(self) -> str:
+        return self._name
 
 
 class JsonSchema(Json):
@@ -89,18 +103,19 @@ def get_schema(url: str) -> Json:
     :param url:
     :return:
     :raises requests.HTTPError
+    :raises json.decoder.JSONDecodeError
     """
+    # @todo Will requiring HTTPS be enough for security?
     response = requests.get(url, headers={
         'Accept': 'application/schema+json; q=1, application/json; q=0.9, */*',
     })
     response.raise_for_status()
-    return Json.from_raw(response.text)
+    return Json.from_data(response.json())
 
 
 class Validator:
     def validate(self, subject: Json, schema: Optional[Json] = None):
-        reference_resolver = RefResolver(
-            'http://localhost', 'http://localhost')
+        reference_resolver = RefResolver('', {})
         data = subject.data
         if schema is None:
             message = 'The JSON must be an object with a "schema" key.'
@@ -111,7 +126,6 @@ class Validator:
             _, schema = reference_resolver.resolve(data['$schema'])
         else:
             schema = schema.data
-        assert schema is not None
         validate(data, schema)
 
 
@@ -122,27 +136,35 @@ class Rewriter(with_metaclass(ContractsMeta)):
         pass
 
 
-class InternalReferenceAggregator(Rewriter):
+class IdentifiableDataTypeAggregator(Rewriter):
     """
-    Rewrites a JSON Schema's InternalReferences.
+    Rewrites a JSON Schema's IdentifiableDataTypes.
     """
 
     @contract
-    def _rewrite_reference(self, reference: InternalReference, definitions: Dict) -> Tuple:
+    def _rewrite_data_type(self, data_type: IdentifiableDataType,
+                           definitions: Dict) -> Tuple:
         """
-        Rewrites a JSON Schema's InternalReferences.
+        Rewrites an InternalReference.
         """
-        definitions.setdefault(reference.type, {})
-        if reference.name not in definitions[reference.type]:
-            definitions[reference.type][
-                reference.name] = reference.schema.data
+        definitions.setdefault(data_type.group_name, {})
+        if data_type.name not in definitions[data_type.group_name]:
+            # Set a placeholder definition to avoid infinite loops.
+            definitions[data_type.group_name][data_type.name] = {}
+            # Rewrite the reference itself, because it may contain further
+            # references.
+            data, definitions = self._rewrite(
+                data_type.schema.data, definitions)
+            definitions[data_type.group_name][data_type.name] = data
         return {
-            '$ref': '#/definitions/%s/%s' % (reference.type,
-                                             reference.name),
+            '$ref': '#/definitions/%s/%s' % (data_type.group_name,
+                                             data_type.name),
         }, definitions
 
     def rewrite(self, schema):
-        data, definitions = self._rewrite(schema.data, {})
+        definitions = {
+        } if 'definitions' not in schema.data else schema.data['definitions']
+        data, definitions = self._rewrite(schema.data, definitions)
         # There is no reason we should omit empty definitions, except that
         #  existing code does not always expect them.
         if len(definitions) and len([x for x in definitions if len(x)]):
@@ -152,13 +174,14 @@ class InternalReferenceAggregator(Rewriter):
 
     @contract
     def _rewrite(self, data, definitions: Dict) -> Tuple:
-        if isinstance(data, InternalReference):
-            return self._rewrite_reference(data, definitions)
+        if isinstance(data, IdentifiableDataType):
+            return self._rewrite_data_type(data, definitions)
         if isinstance(data, List):
             for index, item in enumerate(data):
                 data[index], definitions = self._rewrite(item, definitions)
             return data, definitions
         elif isinstance(data, Dict):
+            data = copy(data)
             for key, item in data.items():
                 data[key], definitions = self._rewrite(item, definitions)
             return data, definitions

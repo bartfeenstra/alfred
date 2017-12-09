@@ -12,19 +12,46 @@ from alfred.app import Factory
 
 class Error(Exception):
     @contract
-    def __init__(self, code: str):
+    def __init__(self, code: str, title: str, http_response_status_code: int):
         self._code = code
+        self._title = title
+        self._http_response_status_code = http_response_status_code
 
     @property
-    def code(self):
+    @contract
+    def code(self) -> str:
         return self._code
+
+    @property
+    @contract
+    def title(self) -> str:
+        return self._title
+
+    @property
+    @contract
+    def http_response_status_code(self) -> int:
+        return self._http_response_status_code
 
 
 class NotFoundError(Error):
     CODE = 'not_found'
 
     def __init__(self):
-        super().__init__(self.CODE)
+        super().__init__(self.CODE, 'Not found', 404)
+
+
+class BadGatewayError(Error):
+    CODE = 'bad_gateway'
+
+    def __init__(self):
+        super().__init__(self.CODE, 'Bad gateway', 502)
+
+
+class GatewayTimeoutError(Error):
+    CODE = 'gateway_timeout'
+
+    def __init__(self):
+        super().__init__(self.CODE, 'Gateway timeout', 504)
 
 
 class MessageMeta(with_metaclass(ContractsMeta)):
@@ -106,7 +133,11 @@ class NonConfigurableGetRequestMeta(NonConfigurableRequestMeta):
 
 
 class Response(Message):
-    pass
+    @property
+    @abc.abstractmethod
+    @contract
+    def http_response_status_code(self) -> int:
+        pass
 
 
 class ResponseMeta(MessageMeta):
@@ -124,13 +155,15 @@ class ResponseMeta(MessageMeta):
 
 
 class SuccessResponse(Response):
-    pass
+    @property
+    def http_response_status_code(self):
+        return 200
 
 
 class SuccessResponseMeta(ResponseMeta):
     def to_http_response(self, response, content_type):
         http_response = super().to_http_response(response, content_type)
-        http_response.status = '200'
+        http_response.status = str(response.http_response_status_code)
         return http_response
 
 
@@ -146,6 +179,14 @@ class ErrorResponse(Response):
     @property
     def errors(self) -> Iterable:
         return self._errors
+
+    @property
+    def http_response_status_code(self):
+        if 0 == len(self._errors):
+            return 500
+
+        # We assume the first error is somehow the most important one.
+        return self._errors[0].http_response_status_code
 
 
 class Endpoint(with_metaclass(ContractsMeta)):

@@ -4,9 +4,11 @@ from unittest import TestCase
 import requests_mock
 from requests import HTTPError
 
-from alfred.tests import expand_data, data_provider
+from alfred.tests import data_provider
+from alfred_http.tests import provide_4xx_codes, provide_5xx_codes
 from alfred_rest.json import Json, get_schema, Validator, \
-    InternalReferenceAggregator, DataType, Rewriter, NestedRewriter
+    IdentifiableDataTypeAggregator, Rewriter, NestedRewriter, \
+    IdentifiableDataType
 from alfred_rest.tests import RestTestCase
 
 SCHEMA = {
@@ -22,24 +24,6 @@ SCHEMA = {
     },
     'required': ['fruit_name'],
 }
-
-
-def provide_4xx_codes():
-    """
-    Returns the HTTP 4xx codes.
-    See data_provider().
-    """
-    return expand_data(
-        list(range(400, 418)) + list(range(421, 424)) + [426, 428, 429, 431,
-                                                         451])
-
-
-def provide_5xx_codes():
-    """
-    Returns the HTTP 5xx codes.
-    See data_provider().
-    """
-    return expand_data(list(range(500, 508)) + [510, 511])
 
 
 class JsonTest(TestCase):
@@ -104,9 +88,9 @@ class ValidatorTest(TestCase):
         validator.validate(data, Json.from_data(SCHEMA))
 
 
-class InternalReferenceAggregatorTest(TestCase):
-    def testRewriteWithoutReferenes(self):
-        sut = InternalReferenceAggregator()
+class IdentifiableDataTypeAggregatorTest(TestCase):
+    def testRewriteWithoutDataTypes(self):
+        sut = IdentifiableDataTypeAggregator()
         original_schema = Json.from_data({
             'id': 'https://example.com/schema',
             'foo': {
@@ -124,13 +108,13 @@ class InternalReferenceAggregatorTest(TestCase):
         sut.rewrite(original_schema)
         self.assertEqual(original_schema.data, rewritten_schema.data)
 
-    def testRewriteSimpleReference(self):
-        sut = InternalReferenceAggregator()
+    def testRewriteSimpleDataType(self):
+        sut = IdentifiableDataTypeAggregator()
         original_schema = Json.from_data({
             'id': 'https://example.com/schema',
-            'foo': DataType('Foo', Json.from_data({
+            'foo': IdentifiableDataType(Json.from_data({
                 'type': 'float',
-            })),
+            }), 'Foo'),
         })
         expected_schema = Json.from_data({
             'id': 'https://example.com/schema',
@@ -148,19 +132,19 @@ class InternalReferenceAggregatorTest(TestCase):
         rewritten_schema = sut.rewrite(original_schema)
         self.assertEqual(rewritten_schema.data, expected_schema.data)
 
-    def testRewriteNestedReferences(self):
-        sut = InternalReferenceAggregator()
+    def testRewriteNestedDataTypes(self):
+        sut = IdentifiableDataTypeAggregator()
         original_schema = Json.from_data({
             'id': 'https://example.com/schema',
-            'foo': DataType('Foo', Json.from_data({
+            'foo': IdentifiableDataType(Json.from_data({
                 'type': 'float',
-            })),
+            }), 'Foo'),
             'bar': {
                 'type': 'object',
                 'properties': {
-                    'baz': DataType('Baz', Json.from_data({
+                    'baz': IdentifiableDataType(Json.from_data({
                         'type': 'string',
-                    })),
+                    }), 'Baz'),
                 },
             },
         })
@@ -191,11 +175,11 @@ class InternalReferenceAggregatorTest(TestCase):
         rewritten_schema = sut.rewrite(original_schema)
         self.assertEqual(rewritten_schema.data, expected_schema.data)
 
-    def testRewriteDuplicateReferences(self):
-        sut = InternalReferenceAggregator()
-        data_type = DataType('Foo', Json.from_data({
+    def testRewriteDuplicateDataTypes(self):
+        sut = IdentifiableDataTypeAggregator()
+        data_type = IdentifiableDataType(Json.from_data({
             'type': 'float',
-        }))
+        }), 'Foo')
         original_schema = Json.from_data({
             'id': 'https://example.com/schema',
             'foo': data_type,
@@ -225,7 +209,7 @@ class ExternalReferenceProxyTest(RestTestCase):
     ORIGINAL_EXTERNAL_POINTER = 'http://json-schema.org/draft-04/schema#'
     REWRITTEN_EXTERNAL_POINTER = 'http://127.0.0.1:5000/about/json/external-schema/aHR0cDovL2pzb24tc2NoZW1hLm9yZy9kcmFmdC0wNC9zY2hlbWE%3D'
     ALFRED_POINTER = 'http://127.0.0.1:5000/about/json/schema#definitions/data/Foo'
-    INTERNAL_POINTER = '/#definitions/data/Bar'
+    INTERNAL_POINTER = '#/definitions/data/Bar'
 
     def testRewritePointerWithNonStringShouldPassThrough(self):
         pointer = {}

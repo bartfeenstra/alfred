@@ -6,8 +6,27 @@ from contracts import contract
 from flask import Response as HttpResponse
 
 from alfred.app import App
+from alfred.tests import expand_data
 from alfred_http.endpoints import Endpoint
 from alfred_http.extension import HttpExtension
+
+
+def provide_4xx_codes():
+    """
+    Returns the HTTP 4xx codes.
+    See data_provider().
+    """
+    return expand_data(
+        list(range(400, 418)) + list(range(421, 424)) + [426, 428, 429, 431,
+                                                         451])
+
+
+def provide_5xx_codes():
+    """
+    Returns the HTTP 5xx codes.
+    See data_provider().
+    """
+    return expand_data(list(range(500, 508)) + [510, 511])
 
 
 class HttpTestCase(TestCase):

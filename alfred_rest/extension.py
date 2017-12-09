@@ -5,7 +5,7 @@ from alfred_http.extension import HttpExtension
 from alfred_rest.endpoints import JsonSchemaEndpoint, \
     ExternalJsonSchemaReferenceProxyEndpoint
 from alfred_rest.json import Validator, NestedRewriter, \
-    InternalReferenceAggregator, \
+    IdentifiableDataTypeAggregator, \
     ExternalReferenceProxy
 
 
@@ -31,7 +31,7 @@ class RestExtension(Extension):
 
     @Extension.service(tags=('json_schema_rewriter',))
     def _internal_reference_aggregator(self):
-        return InternalReferenceAggregator()
+        return IdentifiableDataTypeAggregator()
 
     @Extension.service(tags=('json_schema_rewriter',))
     def _external_reference_proxy(self):

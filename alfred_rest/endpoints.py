@@ -1,7 +1,8 @@
 import abc
 import base64
 import json
-from typing import Dict
+from json import JSONDecodeError
+from typing import Dict, Iterable
 
 from contracts import contract
 from flask import Request as HttpRequest
@@ -13,8 +14,64 @@ from alfred_http.endpoints import Endpoint, EndpointUrlBuilder, \
     EndpointRepository, \
     MessageMeta, \
     Response, SuccessResponse, SuccessResponseMeta, \
-    NonConfigurableGetRequestMeta, NonConfigurableRequest, RequestMeta, Request
-from alfred_rest.json import Json, get_schema, Rewriter
+    NonConfigurableGetRequestMeta, NonConfigurableRequest, RequestMeta, \
+    Request, ErrorResponse, GatewayTimeoutError, BadGatewayError
+from alfred_rest.json import Json, get_schema, Rewriter, \
+    IdentifiableDataType, ListType
+
+
+class ErrorType(IdentifiableDataType):
+    def __init__(self):
+        super().__init__(Json.from_data({
+            'type': 'object',
+            'properties': {
+                'code': {
+                    'type': 'string',
+                },
+                'title': {
+                    'type': 'string',
+                },
+            },
+            'required': ['code', 'title'],
+        }), 'error')
+
+    def to_json(self, resource):
+        return {
+            'code': resource.code,
+            'title': resource.title,
+        }
+
+
+class ErrorResponseType(IdentifiableDataType):
+    def __init__(self):
+        self._data_type = ListType(ErrorType())
+        super().__init__(Json.from_data({
+            'type': 'object',
+            'properties': {
+                'errors': self._data_type,
+            },
+            'required': ['errors'],
+        }), 'error', 'response')
+
+    def to_json(self, resource):
+        assert isinstance(resource, ErrorResponse)
+        return Json.from_data({
+            'errors': self._data_type.to_json(resource.errors),
+        })
+
+
+class ResourceType(IdentifiableDataType):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self['type'] = 'object'
+        self.setdefault('properties', {})
+        self.setdefault('required', [])
+        self['properties'].update({
+            'id': {
+                'type': 'string',
+            },
+        })
+        self['required'].append('id')
 
 
 class JsonMessageMeta(MessageMeta):
@@ -39,7 +96,7 @@ class JsonResponseMeta(SuccessResponseMeta, JsonMessageMeta):
         # @todo How do we do that?
         # @todo Maybe only when debug=True, though.
         # @todo Can this be moved to the parent class so we validate requests as well?
-        data = self.to_http_response_json_data(response, content_type).data
+        data = self.to_json(response, content_type).data
         if '$schema' not in data:
             data['$schema'] = '%s#/definitions/response/%s' % (
                 self._urls.build('schema'), self.name)
@@ -49,9 +106,73 @@ class JsonResponseMeta(SuccessResponseMeta, JsonMessageMeta):
 
     @abc.abstractmethod
     @contract
-    def to_http_response_json_data(self, response: Response,
-                                   content_type: str) -> Json:
+    def to_json(self, response: Response, content_type: str) -> Json:
         pass
+
+
+class AlfredErrorResponseMeta(JsonResponseMeta):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._data_type = ErrorResponseType()
+
+    def to_json(self, response, content_type):
+        return self._data_type.to_json(response)
+
+    def get_json_schema(self):
+        return Json.from_data(self._data_type)
+
+
+class AlfredResponseMeta(AlfredErrorResponseMeta):
+    def to_json(self, response, content_type):
+        if isinstance(response, SuccessResponse):
+            return self.to_success_json(response,
+                                        content_type)
+        return super().to_json(response, content_type)
+
+    def get_json_schema(self):
+        return Json.from_data({
+            'oneOf': [
+                super().get_json_schema().data,
+                self.get_success_json_schema().data,
+            ],
+        })
+
+    @abc.abstractmethod
+    @contract
+    def get_success_json_schema(self) -> Json:
+        pass
+
+    @abc.abstractmethod
+    @contract
+    def to_success_json(self, response: Response,
+                        content_type: str) -> Json:
+        pass
+
+
+class AlfredResourcesResponseMeta(AlfredResponseMeta):
+    def get_success_json_schema(self) -> Json:
+        return Json.from_data({
+            'type': 'array',
+            'items': {
+                'type': self._get_resource_type()
+            },
+        })
+
+    @abc.abstractmethod
+    @contract
+    def _get_resource_type(self) -> ResourceType:
+        pass
+
+    @abc.abstractmethod
+    @contract
+    def _get_resources(self) -> Iterable:
+        pass
+
+    def to_success_json(self, response, content_type):
+        items = []
+        for resource in self._get_resources():
+            items.append(self._get_resource_type().to_json(resource))
+        return Json.from_data(items)
 
 
 class JsonSchemaResponse(SuccessResponse):
@@ -66,10 +187,12 @@ class JsonSchemaResponse(SuccessResponse):
         return self._schema
 
 
-class JsonSchemaResponseMeta(JsonResponseMeta, AppAwareFactory):
+class JsonSchemaResponseMeta(AlfredResponseMeta, AppAwareFactory):
+    NAME = 'schema'
+
     @contract
     def __init__(self, urls: EndpointUrlBuilder, rewriter: Rewriter):
-        super().__init__('schema', urls)
+        super().__init__(self.NAME, urls)
         self._rewriter = rewriter
 
     @classmethod
@@ -85,15 +208,13 @@ class JsonSchemaResponseMeta(JsonResponseMeta, AppAwareFactory):
         http_response.status = '200'
         return http_response
 
-    def to_http_response_json_data(self, response, content_type):
+    def to_success_json(self, response, content_type):
         assert isinstance(response, JsonSchemaResponse)
         schema = response.schema
         self._rewriter.rewrite(schema)
         return schema
 
-    def get_json_schema(self):
-        # @todo ReDoc fails on these references somehow. Find out why, and fix it.
-        # @todo Could this be because the JSON Schema schema, contains a $schema key to its own public URL?
+    def get_success_json_schema(self):
         return Json.from_data({
             '$ref': 'http://json-schema.org/draft-04/schema#',
             'description': 'A JSON Schema.',
@@ -104,20 +225,22 @@ class JsonSchemaEndpoint(Endpoint, AppAwareFactory):
     NAME = 'schema'
 
     @contract
-    def __init__(self, factory: Factory, endpoints: EndpointRepository):
+    def __init__(self, factory: Factory, endpoints: EndpointRepository, urls: EndpointUrlBuilder):
         super().__init__(factory, self.NAME,
                          '/about/json/schema',
                          NonConfigurableGetRequestMeta,
                          JsonSchemaResponseMeta)
         self._endpoints = endpoints
+        self._urls = urls
 
     @classmethod
     def from_app(cls, app):
-        return cls(app.factory, app.service('http', 'endpoints'))
+        return cls(app.factory, app.service('http', 'endpoints'), app.service('http', 'urls'))
 
     def handle(self, request):
         assert isinstance(request, NonConfigurableRequest)
         schema = {
+            'id': self._urls.build(self.name),
             'definitions': {
                 'request': {},
                 'response': {},
@@ -137,8 +260,10 @@ class JsonSchemaEndpoint(Endpoint, AppAwareFactory):
 
 
 class ExternalJsonSchemaRequestMeta(RequestMeta):
+    NAME = 'external-schema'
+
     def __init__(self):
-        super().__init__('external-schema', 'GET')
+        super().__init__(self.NAME, 'GET')
 
     def from_http_request(self, http_request: HttpRequest,
                           parameters: Dict):
@@ -169,9 +294,11 @@ class ExternalJsonSchemaReferenceProxyEndpoint(Endpoint, AppAwareFactory):
     The {id} parameter is the base64-encoded URL of the schema to load.
     """
 
+    NAME = 'external-schema'
+
     @contract
     def __init__(self, factory: Factory, urls: EndpointUrlBuilder):
-        super().__init__(factory, 'external-schema',
+        super().__init__(factory, self.NAME,
                          '/about/json/external-schema/{id}',
                          ExternalJsonSchemaRequestMeta,
                          JsonSchemaResponseMeta)
@@ -189,12 +316,12 @@ class ExternalJsonSchemaReferenceProxyEndpoint(Endpoint, AppAwareFactory):
             try:
                 schema = get_schema(schema_url)
                 self._schemas[schema_url] = schema
-            except HTTPError:
-                # @todo We have no error handling yet!
-                # @todo Make ErrorResponse work.
-                # @todo Log these errors.
-                # @todo Trigger a 404 here. Or maybe base our response on the HTTP response status code.
-                pass
+            except HTTPError as e:
+                if '408' == e.response.status_code:
+                    return ErrorResponse().with_error(GatewayTimeoutError())
+                return ErrorResponse().with_error(BadGatewayError())
+            except JSONDecodeError:
+                return ErrorResponse().with_error(BadGatewayError())
 
         schema = self._schemas[schema_url]
         return JsonSchemaResponse(schema)
