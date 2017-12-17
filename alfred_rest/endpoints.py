@@ -109,7 +109,7 @@ class JsonResponseMeta(SuccessResponseMeta, JsonMessageMeta):
         pass
 
 
-class AlfredErrorResponseMeta(JsonResponseMeta):
+class RestErrorResponseMeta(JsonResponseMeta):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._data_type = ErrorResponseType()
@@ -121,7 +121,7 @@ class AlfredErrorResponseMeta(JsonResponseMeta):
         return self._data_type
 
 
-class AlfredResponseMeta(AlfredErrorResponseMeta):
+class RestResponseMeta(RestErrorResponseMeta):
     def to_json(self, response, content_type):
         if isinstance(response, SuccessResponse):
             return self.to_success_json(response,
@@ -148,7 +148,7 @@ class AlfredResponseMeta(AlfredErrorResponseMeta):
         pass
 
 
-class AlfredResourcesResponseMeta(AlfredResponseMeta):
+class RestResourcesResponseMeta(RestResponseMeta):
     def get_success_json_schema(self):
         return {
             'type': 'array',
@@ -186,7 +186,7 @@ class JsonSchemaResponse(SuccessResponse):
         return self._schema
 
 
-class JsonSchemaResponseMeta(AlfredResponseMeta, AppAwareFactory):
+class JsonSchemaResponseMeta(RestResponseMeta, AppAwareFactory):
     NAME = 'schema'
 
     @contract
