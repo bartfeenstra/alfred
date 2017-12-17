@@ -61,6 +61,7 @@ class OpenApiResponseMeta(SuccessResponseMeta, JsonMessageMeta, AppAwareFactory)
     def get_json_schema(self):
         return Json.from_data({
             '$ref': 'http://swagger.io/v2/schema.json#',
+            'description': 'An OpenAPI/Swagger 2.0 schema.',
         })
 
 

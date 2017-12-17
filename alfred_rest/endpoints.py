@@ -1,12 +1,9 @@
 import abc
-import base64
 import json
-from json import JSONDecodeError
 from typing import Dict, Iterable
 
 from contracts import contract
 from flask import Request as HttpRequest
-from requests import HTTPError
 
 from alfred.app import Factory
 from alfred.extension import AppAwareFactory
@@ -15,20 +12,24 @@ from alfred_http.endpoints import Endpoint, EndpointUrlBuilder, \
     MessageMeta, \
     Response, SuccessResponse, SuccessResponseMeta, \
     NonConfigurableGetRequestMeta, NonConfigurableRequest, RequestMeta, \
-    Request, ErrorResponse, GatewayTimeoutError, BadGatewayError
-from alfred_rest.json import Json, get_schema, Rewriter, \
-    IdentifiableDataType, ListType
+    Request, ErrorResponse, NotFoundError
+from alfred_rest import base64_decodes
+from alfred_rest.json import Json, Rewriter, \
+    IdentifiableDataType, ListType, SchemaRepository, SchemaNotFound
 
 
 class ErrorType(IdentifiableDataType):
     def __init__(self):
         super().__init__(Json.from_data({
+            'title': 'An API error',
             'type': 'object',
             'properties': {
                 'code': {
+                    'title': 'The machine-readable error code.',
                     'type': 'string',
                 },
                 'title': {
+                    'title': 'The human-readable error title.',
                     'type': 'string',
                 },
             },
@@ -46,6 +47,7 @@ class ErrorResponseType(IdentifiableDataType):
     def __init__(self):
         self._data_type = ListType(ErrorType())
         super().__init__(Json.from_data({
+            'title': 'Error response',
             'type': 'object',
             'properties': {
                 'errors': self._data_type,
@@ -97,9 +99,6 @@ class JsonResponseMeta(SuccessResponseMeta, JsonMessageMeta):
         # @todo Maybe only when debug=True, though.
         # @todo Can this be moved to the parent class so we validate requests as well?
         data = self.to_json(response, content_type).data
-        if '$schema' not in data:
-            data['$schema'] = '%s#/definitions/response/%s' % (
-                self._urls.build('schema'), self.name)
         http_response.set_data(json.dumps(data))
 
         return http_response
@@ -131,7 +130,7 @@ class AlfredResponseMeta(AlfredErrorResponseMeta):
 
     def get_json_schema(self):
         return Json.from_data({
-            'oneOf': [
+            'anyOf': [
                 super().get_json_schema().data,
                 self.get_success_json_schema().data,
             ],
@@ -225,7 +224,8 @@ class JsonSchemaEndpoint(Endpoint, AppAwareFactory):
     NAME = 'schema'
 
     @contract
-    def __init__(self, factory: Factory, endpoints: EndpointRepository, urls: EndpointUrlBuilder):
+    def __init__(self, factory: Factory, endpoints: EndpointRepository,
+                 urls: EndpointUrlBuilder):
         super().__init__(factory, self.NAME,
                          '/about/json/schema',
                          NonConfigurableGetRequestMeta,
@@ -235,12 +235,16 @@ class JsonSchemaEndpoint(Endpoint, AppAwareFactory):
 
     @classmethod
     def from_app(cls, app):
-        return cls(app.factory, app.service('http', 'endpoints'), app.service('http', 'urls'))
+        return cls(app.factory, app.service('http', 'endpoints'),
+                   app.service('http', 'urls'))
 
     def handle(self, request):
         assert isinstance(request, NonConfigurableRequest)
         schema = {
             'id': self._urls.build(self.name),
+            '$schema': 'http://json-schema.org/draft-04/schema#',
+            # Prevent most values from validating against the top-level schema.
+            'enum': [None],
             'definitions': {
                 'request': {},
                 'response': {},
@@ -267,8 +271,7 @@ class ExternalJsonSchemaRequestMeta(RequestMeta):
 
     def from_http_request(self, http_request: HttpRequest,
                           parameters: Dict):
-        return ExternalJsonSchemaRequest(
-            base64.b64decode(parameters['id']).decode('utf-8'))
+        return ExternalJsonSchemaRequest(base64_decodes(parameters['id']))
 
     def get_content_types(self):
         return []
@@ -284,7 +287,7 @@ class ExternalJsonSchemaRequest(Request):
         return self._schema_url
 
 
-class ExternalJsonSchemaReferenceProxyEndpoint(Endpoint, AppAwareFactory):
+class ExternalJsonSchemaEndpoint(Endpoint, AppAwareFactory):
     """
     Provides an endpoint that proxies an external JSON Schema. This circumvents
     Cross-Origin Resource Sharing (CORS) problems, by not requiring API clients
@@ -297,31 +300,25 @@ class ExternalJsonSchemaReferenceProxyEndpoint(Endpoint, AppAwareFactory):
     NAME = 'external-schema'
 
     @contract
-    def __init__(self, factory: Factory, urls: EndpointUrlBuilder):
+    def __init__(self, factory: Factory, urls: EndpointUrlBuilder,
+                 schemas: SchemaRepository):
         super().__init__(factory, self.NAME,
                          '/about/json/external-schema/{id}',
                          ExternalJsonSchemaRequestMeta,
                          JsonSchemaResponseMeta)
         self._urls = urls
-        self._schemas = {}
+        self._schemas = schemas
 
     @classmethod
     def from_app(cls, app):
-        return cls(app.factory, app.service('http', 'urls'))
+        return cls(app.factory, app.service('http', 'urls'),
+                   app.service('rest', 'json_schemas'))
 
     def handle(self, request):
         assert isinstance(request, ExternalJsonSchemaRequest)
         schema_url = request.schema_url
-        if schema_url not in self._schemas:
-            try:
-                schema = get_schema(schema_url)
-                self._schemas[schema_url] = schema
-            except HTTPError as e:
-                if '408' == e.response.status_code:
-                    return ErrorResponse().with_error(GatewayTimeoutError())
-                return ErrorResponse().with_error(BadGatewayError())
-            except JSONDecodeError:
-                return ErrorResponse().with_error(BadGatewayError())
-
-        schema = self._schemas[schema_url]
-        return JsonSchemaResponse(schema)
+        try:
+            schema = self._schemas.get_schema(schema_url)
+            return JsonSchemaResponse(Json.from_data(schema))
+        except SchemaNotFound:
+            raise NotFoundError()

@@ -1,13 +1,14 @@
 import abc
 import json
 from copy import copy
-from typing import Optional, Dict, List, Tuple
+from typing import Dict, List, Tuple, Iterable, Optional
 from urllib.parse import urlunsplit, urlsplit
 
-import requests
 from contracts import contract, ContractsMeta, with_metaclass
-from jsonschema import RefResolver, validate
+from jsonschema import validate
+from jsonschema.validators import validator_for
 
+from alfred import format_iter
 from alfred_http.endpoints import EndpointUrlBuilder
 from alfred_rest import base64_encodes
 
@@ -96,39 +97,6 @@ class JsonSchema(Json):
     pass
 
 
-@contract
-def get_schema(url: str) -> Json:
-    """
-    Gets a JSON Schema from a URL.
-    :param url:
-    :return:
-    :raises requests.HTTPError
-    :raises json.decoder.JSONDecodeError
-    """
-    # @todo Will requiring HTTPS be enough for security?
-    response = requests.get(url, headers={
-        'Accept': 'application/schema+json; q=1, application/json; q=0.9, */*',
-    })
-    response.raise_for_status()
-    return Json.from_data(response.json())
-
-
-class Validator:
-    def validate(self, subject: Json, schema: Optional[Json] = None):
-        reference_resolver = RefResolver('', {})
-        data = subject.data
-        if schema is None:
-            message = 'The JSON must be an object with a "schema" key.'
-            if not isinstance(data, dict):
-                raise ValueError('The JSON is not an object: %s' % message)
-            if '$schema' not in data:
-                raise KeyError('No "$schema" key found: %s' % message)
-            _, schema = reference_resolver.resolve(data['$schema'])
-        else:
-            schema = schema.data
-        validate(data, schema)
-
-
 class Rewriter(with_metaclass(ContractsMeta)):
     @abc.abstractmethod
     @contract
@@ -140,6 +108,9 @@ class IdentifiableDataTypeAggregator(Rewriter):
     """
     Rewrites a JSON Schema's IdentifiableDataTypes.
     """
+
+    def __init__(self, urls: EndpointUrlBuilder):
+        self._schema_url = urls.build('schema')
 
     @contract
     def _rewrite_data_type(self, data_type: IdentifiableDataType,
@@ -157,8 +128,9 @@ class IdentifiableDataTypeAggregator(Rewriter):
                 data_type.schema.data, definitions)
             definitions[data_type.group_name][data_type.name] = data
         return {
-            '$ref': '#/definitions/%s/%s' % (data_type.group_name,
-                                             data_type.name),
+            '$ref': '%s#/definitions/%s/%s' % (self._schema_url,
+                                               data_type.group_name,
+                                               data_type.name),
         }, definitions
 
     def rewrite(self, schema):
@@ -271,3 +243,60 @@ class NestedRewriter(Rewriter):
         for rewriter in self._rewriters:
             schema = rewriter.rewrite(schema)
         return schema
+
+
+class Validator:
+    def __init__(self, rewriter: Rewriter):
+        self._rewriter = rewriter
+
+    @contract
+    def validate(self, subject: Json, schema: Json):
+        schema = self._rewriter.rewrite(schema)
+        validate(subject.data, schema.data)
+
+
+class SchemaNotFound(RuntimeError):
+    def __init__(self, schema_id: str,
+                 available_schemas: Optional[Dict] = None):
+        available_schemas = available_schemas if available_schemas is not None else {}
+        if not available_schemas:
+            message = 'Could not find schema "%s", because there are no schemas.' % schema_id
+        else:
+            message = 'Could not find schema "%s". Did you mean one of the following?\n' % schema_id + \
+                      format_iter(available_schemas.keys())
+        super().__init__(message)
+
+
+class SchemaRepository(with_metaclass(ContractsMeta)):
+    def __init__(self):
+        self._schemas = {}
+
+    @contract
+    def add_schema(self, schema: Dict):
+        cls = validator_for(schema)
+        cls.check_schema(schema)
+        assert 'id' in schema
+        assert schema['id'] not in self._schemas
+        self._schemas[schema['id']] = schema
+
+    def get_schema(self, schema_id: str) -> Optional[Dict]:
+        try:
+            return self._schemas[schema_id]
+        # If we cannot find an exact match, try the ID with or without an empty
+        # fragment.
+        except KeyError:
+            if '#' == schema_id[-1]:
+                schema_id = schema_id[0:-1]
+            elif '#' not in schema_id:
+                schema_id += '#'
+            else:
+                # This repository does not (yet?) support subschemas.
+                raise SchemaNotFound(schema_id, self._schemas)
+            try:
+                return self._schemas[schema_id]
+            except KeyError:
+                raise SchemaNotFound(schema_id, self._schemas)
+
+    @contract
+    def get_schemas(self) -> Iterable:
+        return list(self._schemas.values())
