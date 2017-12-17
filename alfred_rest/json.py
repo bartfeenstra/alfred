@@ -124,7 +124,7 @@ class ExternalReferenceProxy(Rewriter):
     ExternalJsonSchemaEndpoint.
     """
 
-    _REWRITE_KEYS = ('$ref', '$schema')
+    _REWRITE_KEYS = ('id', '$ref', '$schema')
 
     @contract
     def __init__(self, base_url: str, urls: EndpointUrlBuilder):
