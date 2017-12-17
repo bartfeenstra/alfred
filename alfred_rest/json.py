@@ -234,26 +234,18 @@ class SchemaRepository(with_metaclass(ContractsMeta)):
         cls = validator_for(schema)
         cls.check_schema(schema)
         assert 'id' in schema
+        if '#' not in schema['id']:
+            schema['id'] += '#'
         assert schema['id'] not in self._schemas
         self._schemas[schema['id']] = schema
 
     def get_schema(self, schema_id: str) -> Optional[Dict]:
+        if '#' not in schema_id:
+            schema_id += '#'
         try:
             return self._schemas[schema_id]
-        # If we cannot find an exact match, try the ID with or without an empty
-        # fragment.
         except KeyError:
-            if '#' == schema_id[-1]:
-                schema_id = schema_id[0:-1]
-            elif '#' not in schema_id:
-                schema_id += '#'
-            else:
-                # This repository does not (yet?) support subschemas.
-                raise SchemaNotFound(schema_id, self._schemas)
-            try:
-                return self._schemas[schema_id]
-            except KeyError:
-                raise SchemaNotFound(schema_id, self._schemas)
+            raise SchemaNotFound(schema_id, self._schemas)
 
     @contract
     def get_schemas(self) -> Iterable:
