@@ -234,12 +234,14 @@ class SchemaRepository(with_metaclass(ContractsMeta)):
         cls = validator_for(schema)
         cls.check_schema(schema)
         assert 'id' in schema
+        # Normalize root schemas by appending empty fragments.
         if '#' not in schema['id']:
             schema['id'] += '#'
         assert schema['id'] not in self._schemas
         self._schemas[schema['id']] = schema
 
     def get_schema(self, schema_id: str) -> Optional[Dict]:
+        # Normalize root schemas by appending empty fragments.
         if '#' not in schema_id:
             schema_id += '#'
         try:
