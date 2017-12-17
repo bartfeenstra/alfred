@@ -7,7 +7,6 @@ from jsonschema.validators import validator_for
 
 from alfred_http.tests import HttpTestCase
 from alfred_rest.extension import RestExtension
-from alfred_rest.json import Json
 
 
 class RestTestCase(HttpTestCase):
@@ -27,12 +26,11 @@ class RestTestCase(HttpTestCase):
                 schema_url, endpoint.response_meta.name)
             response_schema = self._get_schema(response_schema_url)
             json_validator = self._app.service('rest', 'json_validator')
-            json_validator.validate(Json.from_data(
-                response.json()), response_schema)
+            json_validator.validate(response.json(), response_schema)
         return response
 
     @contract
-    def _get_schema(self, url: str) -> Json:
+    def _get_schema(self, url: str) -> Dict:
         """
         Gets a JSON Schema from a URL.
         :param url:
@@ -41,7 +39,6 @@ class RestTestCase(HttpTestCase):
         :raises json.decoder.JSONDecodeError
         """
         # @todo Replace this method with direct access to schemas through Python.
-        # @todo Will requiring HTTPS be enough for security?
         response = requests.get(url, headers={
             'Accept': 'application/schema+json; q=1, application/json; q=0.9, text/json; q=0.8, text/x-json; q=0.7, */*',
         })
@@ -53,7 +50,7 @@ class RestTestCase(HttpTestCase):
         else:
             cls = validator_for(schema)
             cls.check_schema(schema)
-        return Json.from_data(schema)
+        return schema
 
     @contract
     def assertRestErrorResponse(self, error_codes: Iterable, response):
@@ -62,8 +59,7 @@ class RestTestCase(HttpTestCase):
         response_schema_url = '%s#/definitions/response/error' % (schema_url,)
         response_schema = self._get_schema(response_schema_url)
         json_validator = self._app.service('rest', 'json_validator')
-        json_validator.validate(Json.from_data(
-            data), response_schema)
+        json_validator.validate(data, response_schema)
         for error_code in error_codes:
             self._assertRestErrorResponseCode(error_code, data)
 

@@ -11,7 +11,6 @@ from alfred_http.endpoints import Endpoint, NonConfigurableRequest, \
     EndpointUrlBuilder
 from alfred_openapi import RESOURCE_PATH
 from alfred_rest.endpoints import JsonMessageMeta
-from alfred_rest.json import Json
 
 
 class OpenApiResponse(SuccessResponse):
@@ -59,10 +58,10 @@ class OpenApiResponseMeta(SuccessResponseMeta, JsonMessageMeta, AppAwareFactory)
         return super().get_content_types() + ['text/html']
 
     def get_json_schema(self):
-        return Json.from_data({
+        return {
             '$ref': 'http://swagger.io/v2/schema.json#',
             'description': 'An OpenAPI/Swagger 2.0 schema.',
-        })
+        }
 
 
 class OpenApiEndpoint(Endpoint, AppAwareFactory):

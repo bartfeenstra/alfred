@@ -5,9 +5,9 @@ from unittest.mock import MagicMock
 from jsonschema import ValidationError
 
 from alfred_http.endpoints import EndpointUrlBuilder
-from alfred_rest.json import Json, Validator, \
-    IdentifiableDataTypeAggregator, Rewriter, NestedRewriter, \
-    IdentifiableDataType, SchemaRepository, SchemaNotFound
+from alfred_rest.json import Validator, IdentifiableDataTypeAggregator, \
+    Rewriter, NestedRewriter, IdentifiableDataType, SchemaRepository, \
+    SchemaNotFound
 from alfred_rest.tests import RestTestCase
 
 SCHEMA = {
@@ -25,24 +25,6 @@ SCHEMA = {
 }
 
 
-class JsonTest(TestCase):
-    def testData(self):
-        data = {
-            'Foo': 'Bar',
-        }
-        raw = '{"Foo": "Bar"}'
-        self.assertEqual(Json.from_data(data).data, data)
-        self.assertEqual(Json.from_data(data).raw, raw)
-
-    def testRaw(self):
-        data = {
-            'Foo': 'Bar',
-        }
-        raw = '{"Foo": "Bar"}'
-        self.assertEqual(Json.from_raw(raw).data, data)
-        self.assertEqual(Json.from_raw(raw).raw, raw)
-
-
 class ValidatorTest(TestCase):
     class PassThroughRewriter(Rewriter):
         def rewrite(self, schema):
@@ -50,16 +32,16 @@ class ValidatorTest(TestCase):
 
     def testValidate(self):
         validator = Validator(self.PassThroughRewriter())
-        data = Json.from_data({
+        data = {
             'fruit_name': 'Apple',
-        })
-        validator.validate(data, Json.from_data(SCHEMA))
+        }
+        validator.validate(data, SCHEMA)
 
     def testValidateWithFailure(self):
         validator = Validator(self.PassThroughRewriter())
-        data = Json.from_data({})
+        data = {}
         with self.assertRaises(ValidationError):
-            validator.validate(data, Json.from_data(SCHEMA))
+            validator.validate(data, SCHEMA)
 
 
 class IdentifiableDataTypeAggregatorTest(TestCase):
@@ -68,7 +50,7 @@ class IdentifiableDataTypeAggregatorTest(TestCase):
         urls.build = MagicMock(
             return_value='http://127.0.0.1/about/json/schema')
         sut = IdentifiableDataTypeAggregator(urls)
-        original_schema = Json.from_data({
+        original_schema = {
             'id': 'https://example.com/schema',
             'foo': {
                 '$ref': 'https://example.com/schema#',
@@ -80,10 +62,10 @@ class IdentifiableDataTypeAggregatorTest(TestCase):
                     },
                 ],
             },
-        })
+        }
         rewritten_schema = copy(original_schema)
         sut.rewrite(original_schema)
-        self.assertEqual(original_schema.data, rewritten_schema.data)
+        self.assertEqual(original_schema, rewritten_schema)
         urls.build.assert_called_once_with('schema')
 
     def testRewriteSimpleDataType(self):
@@ -91,13 +73,13 @@ class IdentifiableDataTypeAggregatorTest(TestCase):
         urls.build = MagicMock(
             return_value='http://127.0.0.1/about/json/schema')
         sut = IdentifiableDataTypeAggregator(urls)
-        original_schema = Json.from_data({
+        original_schema = {
             'id': 'https://example.com/schema',
-            'foo': IdentifiableDataType(Json.from_data({
+            'foo': IdentifiableDataType({
                 'type': 'float',
-            }), 'Foo'),
-        })
-        expected_schema = Json.from_data({
+            }, 'Foo'),
+        }
+        expected_schema = {
             'id': 'https://example.com/schema',
             'foo': {
                 '$ref': 'http://127.0.0.1/about/json/schema#/definitions/data/Foo',
@@ -109,9 +91,9 @@ class IdentifiableDataTypeAggregatorTest(TestCase):
                     },
                 },
             },
-        })
+        }
         rewritten_schema = sut.rewrite(original_schema)
-        self.assertEqual(rewritten_schema.data, expected_schema.data)
+        self.assertEqual(rewritten_schema, expected_schema)
         urls.build.assert_called_once_with('schema')
 
     def testRewriteNestedDataTypes(self):
@@ -119,21 +101,21 @@ class IdentifiableDataTypeAggregatorTest(TestCase):
         urls.build = MagicMock(
             return_value='http://127.0.0.1/about/json/schema')
         sut = IdentifiableDataTypeAggregator(urls)
-        original_schema = Json.from_data({
+        original_schema = {
             'id': 'https://example.com/schema',
-            'foo': IdentifiableDataType(Json.from_data({
+            'foo': IdentifiableDataType({
                 'type': 'float',
-            }), 'Foo'),
+            }, 'Foo'),
             'bar': {
                 'type': 'object',
                 'properties': {
-                    'baz': IdentifiableDataType(Json.from_data({
+                    'baz': IdentifiableDataType({
                         'type': 'string',
-                    }), 'Baz'),
+                    }, 'Baz'),
                 },
             },
-        })
-        expected_schema = Json.from_data({
+        }
+        expected_schema = {
             'id': 'https://example.com/schema',
             'foo': {
                 '$ref': 'http://127.0.0.1/about/json/schema#/definitions/data/Foo',
@@ -156,9 +138,9 @@ class IdentifiableDataTypeAggregatorTest(TestCase):
                     },
                 },
             },
-        })
+        }
         rewritten_schema = sut.rewrite(original_schema)
-        self.assertEqual(rewritten_schema.data, expected_schema.data)
+        self.assertEqual(rewritten_schema, expected_schema)
         urls.build.assert_called_once_with('schema')
 
     def testRewriteDuplicateDataTypes(self):
@@ -166,15 +148,15 @@ class IdentifiableDataTypeAggregatorTest(TestCase):
         urls.build = MagicMock(
             return_value='http://127.0.0.1/about/json/schema')
         sut = IdentifiableDataTypeAggregator(urls)
-        data_type = IdentifiableDataType(Json.from_data({
+        data_type = IdentifiableDataType({
             'type': 'float',
-        }), 'Foo')
-        original_schema = Json.from_data({
+        }, 'Foo')
+        original_schema = {
             'id': 'https://example.com/schema',
             'foo': data_type,
             'foo2': data_type,
-        })
-        expected_schema = Json.from_data({
+        }
+        expected_schema = {
             'id': 'https://example.com/schema',
             'foo': {
                 '$ref': 'http://127.0.0.1/about/json/schema#/definitions/data/Foo',
@@ -189,9 +171,9 @@ class IdentifiableDataTypeAggregatorTest(TestCase):
                     },
                 },
             },
-        })
+        }
         rewritten_schema = sut.rewrite(original_schema)
-        self.assertEqual(rewritten_schema.data, expected_schema.data)
+        self.assertEqual(rewritten_schema, expected_schema)
         urls.build.assert_called_once_with('schema')
 
 
@@ -222,7 +204,7 @@ class ExternalReferenceProxyTest(RestTestCase):
             self.ORIGINAL_EXTERNAL_POINTER), self.REWRITTEN_EXTERNAL_POINTER)
 
     def testRewrite(self):
-        original_schema = Json.from_data({
+        original_schema = {
             'id': self.ORIGINAL_EXTERNAL_POINTER,
             'foo': {
                 '$ref': self.ORIGINAL_EXTERNAL_POINTER,
@@ -240,8 +222,8 @@ class ExternalReferenceProxyTest(RestTestCase):
                     },
                 ],
             },
-        })
-        expected_schema = Json.from_data({
+        }
+        expected_schema = {
             'id': self.REWRITTEN_EXTERNAL_POINTER,
             'foo': {
                 '$ref': self.REWRITTEN_EXTERNAL_POINTER,
@@ -259,37 +241,37 @@ class ExternalReferenceProxyTest(RestTestCase):
                     },
                 ],
             },
-        })
+        }
         sut = self._app.service('rest', 'external_reference_proxy')
         rewritten_schema = sut.rewrite(original_schema)
-        self.assertEqual(rewritten_schema.data, expected_schema.data)
+        self.assertEqual(rewritten_schema, expected_schema)
 
 
 class NestedRewriterTest(RestTestCase):
     class DogRewriter(Rewriter):
-        def rewrite(self, schema: Json):
-            schema.data['required'].append('woof')
+        def rewrite(self, schema):
+            schema['required'].append('woof')
             return schema
 
     class CatRewriter(Rewriter):
-        def rewrite(self, schema: Json):
-            schema.data['required'].append('meow')
+        def rewrite(self, schema):
+            schema['required'].append('meow')
             return schema
 
     def testRewritePointerWithNonStringShouldPassThrough(self):
         sut = NestedRewriter()
         sut.add_rewriter(self.DogRewriter())
         sut.add_rewriter(self.CatRewriter())
-        original_schema = Json.from_data({
+        original_schema = {
             'type': 'object',
             'required': [],
-        })
-        expected_schema = Json.from_data({
+        }
+        expected_schema = {
             'type': 'object',
             'required': ['woof', 'meow'],
-        })
+        }
         rewritten_schema = sut.rewrite(original_schema)
-        self.assertEqual(rewritten_schema.data, expected_schema.data)
+        self.assertEqual(rewritten_schema, expected_schema)
 
 
 class SchemaRepositoryTest(TestCase):

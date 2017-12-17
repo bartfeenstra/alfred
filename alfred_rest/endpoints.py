@@ -14,13 +14,13 @@ from alfred_http.endpoints import Endpoint, EndpointUrlBuilder, \
     NonConfigurableGetRequestMeta, NonConfigurableRequest, RequestMeta, \
     Request, ErrorResponse, NotFoundError
 from alfred_rest import base64_decodes
-from alfred_rest.json import Json, Rewriter, \
-    IdentifiableDataType, ListType, SchemaRepository, SchemaNotFound
+from alfred_rest.json import Rewriter, IdentifiableDataType, ListType, \
+    SchemaRepository, SchemaNotFound
 
 
 class ErrorType(IdentifiableDataType):
     def __init__(self):
-        super().__init__(Json.from_data({
+        super().__init__({
             'title': 'An API error',
             'type': 'object',
             'properties': {
@@ -34,7 +34,7 @@ class ErrorType(IdentifiableDataType):
                 },
             },
             'required': ['code', 'title'],
-        }), 'error')
+        }, 'error')
 
     def to_json(self, resource):
         return {
@@ -46,20 +46,20 @@ class ErrorType(IdentifiableDataType):
 class ErrorResponseType(IdentifiableDataType):
     def __init__(self):
         self._data_type = ListType(ErrorType())
-        super().__init__(Json.from_data({
+        super().__init__({
             'title': 'Error response',
             'type': 'object',
             'properties': {
                 'errors': self._data_type,
             },
             'required': ['errors'],
-        }), 'error', 'response')
+        }, 'error', 'response')
 
     def to_json(self, resource):
         assert isinstance(resource, ErrorResponse)
-        return Json.from_data({
+        return {
             'errors': self._data_type.to_json(resource.errors),
-        })
+        }
 
 
 class ResourceType(IdentifiableDataType):
@@ -82,7 +82,7 @@ class JsonMessageMeta(MessageMeta):
 
     @abc.abstractmethod
     @contract
-    def get_json_schema(self) -> Json:
+    def get_json_schema(self) -> Dict:
         pass
 
 
@@ -98,14 +98,14 @@ class JsonResponseMeta(SuccessResponseMeta, JsonMessageMeta):
         # @todo How do we do that?
         # @todo Maybe only when debug=True, though.
         # @todo Can this be moved to the parent class so we validate requests as well?
-        data = self.to_json(response, content_type).data
+        data = self.to_json(response, content_type)
         http_response.set_data(json.dumps(data))
 
         return http_response
 
     @abc.abstractmethod
     @contract
-    def to_json(self, response: Response, content_type: str) -> Json:
+    def to_json(self, response: Response, content_type: str):
         pass
 
 
@@ -118,7 +118,7 @@ class AlfredErrorResponseMeta(JsonResponseMeta):
         return self._data_type.to_json(response)
 
     def get_json_schema(self):
-        return Json.from_data(self._data_type)
+        return self._data_type
 
 
 class AlfredResponseMeta(AlfredErrorResponseMeta):
@@ -129,33 +129,33 @@ class AlfredResponseMeta(AlfredErrorResponseMeta):
         return super().to_json(response, content_type)
 
     def get_json_schema(self):
-        return Json.from_data({
+        return {
             'anyOf': [
-                super().get_json_schema().data,
-                self.get_success_json_schema().data,
+                super().get_json_schema(),
+                self.get_success_json_schema(),
             ],
-        })
+        }
 
     @abc.abstractmethod
     @contract
-    def get_success_json_schema(self) -> Json:
+    def get_success_json_schema(self) -> Dict:
         pass
 
     @abc.abstractmethod
     @contract
     def to_success_json(self, response: Response,
-                        content_type: str) -> Json:
+                        content_type: str):
         pass
 
 
 class AlfredResourcesResponseMeta(AlfredResponseMeta):
-    def get_success_json_schema(self) -> Json:
-        return Json.from_data({
+    def get_success_json_schema(self):
+        return {
             'type': 'array',
             'items': {
                 'type': self._get_resource_type()
             },
-        })
+        }
 
     @abc.abstractmethod
     @contract
@@ -171,18 +171,18 @@ class AlfredResourcesResponseMeta(AlfredResponseMeta):
         items = []
         for resource in self._get_resources():
             items.append(self._get_resource_type().to_json(resource))
-        return Json.from_data(items)
+        return items
 
 
 class JsonSchemaResponse(SuccessResponse):
     @contract
-    def __init__(self, schema: Json):
+    def __init__(self, schema: Dict):
         super().__init__()
         self._schema = schema
 
     @property
     @contract
-    def schema(self) -> Json:
+    def schema(self) -> Dict:
         return self._schema
 
 
@@ -214,10 +214,10 @@ class JsonSchemaResponseMeta(AlfredResponseMeta, AppAwareFactory):
         return schema
 
     def get_success_json_schema(self):
-        return Json.from_data({
+        return {
             '$ref': 'http://json-schema.org/draft-04/schema#',
             'description': 'A JSON Schema.',
-        })
+        }
 
 
 class JsonSchemaEndpoint(Endpoint, AppAwareFactory):
@@ -254,13 +254,13 @@ class JsonSchemaEndpoint(Endpoint, AppAwareFactory):
             if isinstance(request_meta, JsonMessageMeta):
                 schema['definitions']['request'][
                     request_meta.name] = request_meta.get_json_schema(
-                ).data
+                )
         for response_meta in self._endpoints.get_response_metas():
             if isinstance(response_meta, JsonMessageMeta):
                 schema['definitions']['response'][
                     response_meta.name] = response_meta.get_json_schema(
-                ).data
-        return JsonSchemaResponse(Json.from_data(schema))
+                )
+        return JsonSchemaResponse(schema)
 
 
 class ExternalJsonSchemaRequestMeta(RequestMeta):
@@ -319,6 +319,6 @@ class ExternalJsonSchemaEndpoint(Endpoint, AppAwareFactory):
         schema_url = request.schema_url
         try:
             schema = self._schemas.get_schema(schema_url)
-            return JsonSchemaResponse(Json.from_data(schema))
+            return JsonSchemaResponse(schema)
         except SchemaNotFound:
             raise NotFoundError()

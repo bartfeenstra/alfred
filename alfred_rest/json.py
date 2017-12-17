@@ -1,5 +1,4 @@
 import abc
-import json
 from copy import copy
 from typing import Dict, List, Tuple, Iterable, Optional
 from urllib.parse import urlunsplit, urlsplit
@@ -13,54 +12,25 @@ from alfred_http.endpoints import EndpointUrlBuilder
 from alfred_rest import base64_encodes
 
 
-class Json:
-    def __init__(self, data):
-        # Try dumping the data to ensure it is valid.
-        json.dumps(data)
-        self._data = data
-
-    @classmethod
-    def from_raw(cls, raw: str) -> 'Json':
-        return cls(json.loads(raw))
-
-    @classmethod
-    def from_data(cls, data) -> 'Json':
-        return cls(data)
-
-    @property
-    def raw(self) -> str:
-        return json.dumps(self.data)
-
-    @property
-    def data(self):
-        return self._data
-
-
 class DataType(dict):
     @contract
-    def __init__(self, schema: Json):
+    def __init__(self, schema: Dict):
         super().__init__()
-        self.update(schema.data)
+        self.update(schema)
         self._schema = schema
 
-    @property
-    @contract
-    def schema(self) -> Json:
-        return self._schema
-
     @abc.abstractmethod
-    @contract
-    def to_json(self, resource) -> Json:
+    def to_json(self, resource):
         pass
 
 
 class ListType(DataType):
     @contract
     def __init__(self, data_type: DataType):
-        super().__init__(Json.from_data({
+        super().__init__({
             'type': 'array',
             'items': data_type,
-        }))
+        })
         self._data_type = data_type
 
     def to_json(self, resource):
@@ -77,7 +47,7 @@ class IdentifiableDataType(DataType):
     """
 
     @contract
-    def __init__(self, schema: Json, name: str, group_name: str = 'data'):
+    def __init__(self, schema: Dict, name: str, group_name: str = 'data'):
         super().__init__(schema)
         self._group_name = group_name
         self._name = name
@@ -96,7 +66,7 @@ class IdentifiableDataType(DataType):
 class Rewriter(with_metaclass(ContractsMeta)):
     @abc.abstractmethod
     @contract
-    def rewrite(self, schema: Json) -> Json:
+    def rewrite(self, schema: Dict) -> Dict:
         pass
 
 
@@ -120,9 +90,8 @@ class IdentifiableDataTypeAggregator(Rewriter):
             definitions[data_type.group_name][data_type.name] = {}
             # Rewrite the reference itself, because it may contain further
             # references.
-            data, definitions = self._rewrite(
-                data_type.schema.data, definitions)
-            definitions[data_type.group_name][data_type.name] = data
+            schema, definitions = self._rewrite(dict(data_type), definitions)
+            definitions[data_type.group_name][data_type.name] = schema
         return {
             '$ref': '%s#/definitions/%s/%s' % (self._schema_url,
                                                data_type.group_name,
@@ -130,15 +99,14 @@ class IdentifiableDataTypeAggregator(Rewriter):
         }, definitions
 
     def rewrite(self, schema):
-        definitions = {
-        } if 'definitions' not in schema.data else schema.data['definitions']
-        data, definitions = self._rewrite(schema.data, definitions)
+        definitions = {} if 'definitions' not in schema else schema['definitions']
+        schema, definitions = self._rewrite(schema, definitions)
         # There is no reason we should omit empty definitions, except that
         #  existing code does not always expect them.
         if len(definitions) and len([x for x in definitions if len(x)]):
-            data.setdefault('definitions', {})
-            data['definitions'].update(definitions)
-        return Json.from_data(data)
+            schema.setdefault('definitions', {})
+            schema['definitions'].update(definitions)
+        return schema
 
     @contract
     def _rewrite(self, data, definitions: Dict) -> Tuple:
@@ -202,11 +170,11 @@ class ExternalReferenceProxy(Rewriter):
 
         return pointer
 
-    def rewrite(self, schema: Json):
-        data = self._rewrite(schema.data)
-        if isinstance(schema.data, Dict) and 'id' in schema.data:
-            data['id'] = self.rewrite_pointer(schema.data['id'])
-        return Json.from_data(data)
+    def rewrite(self, schema):
+        schema = self._rewrite(schema)
+        if isinstance(schema, Dict) and 'id' in schema:
+            schema['id'] = self.rewrite_pointer(schema['id'])
+        return schema
 
     def _rewrite(self, data):
         if isinstance(data, List):
@@ -246,9 +214,9 @@ class Validator:
         self._rewriter = rewriter
 
     @contract
-    def validate(self, subject: Json, schema: Json):
+    def validate(self, subject, schema: Dict):
         schema = self._rewriter.rewrite(schema)
-        validate(subject.data, schema.data)
+        validate(subject, schema)
 
 
 class SchemaNotFound(RuntimeError):
