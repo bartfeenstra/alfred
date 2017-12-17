@@ -13,12 +13,6 @@ from alfred_rest import base64_encodes
 
 
 class DataType(dict):
-    @contract
-    def __init__(self, schema: Dict):
-        super().__init__()
-        self.update(schema)
-        self._schema = schema
-
     @abc.abstractmethod
     def to_json(self, resource):
         pass
@@ -172,7 +166,7 @@ class ExternalReferenceProxy(Rewriter):
 
     def rewrite(self, schema):
         schema = self._rewrite(schema)
-        if isinstance(schema, Dict) and 'id' in schema:
+        if 'id' in schema:
             schema['id'] = self.rewrite_pointer(schema['id'])
         return schema
 
