@@ -93,10 +93,6 @@ class IdentifiableDataType(DataType):
         return self._name
 
 
-class JsonSchema(Json):
-    pass
-
-
 class Rewriter(with_metaclass(ContractsMeta)):
     @abc.abstractmethod
     @contract
