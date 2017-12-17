@@ -34,6 +34,10 @@ class JsonSchemaEndpointTest(RestTestCase):
 
 
 class ExternalJsonSchemaEndpointTest(RestTestCase):
+    def setUp(self):
+        super().setUp()
+        self.maxDiff = None
+
     def testEndpointShouldReturnSchema(self):
         external_schema_url = 'http://json-schema.org/draft-04/schema#'
 
