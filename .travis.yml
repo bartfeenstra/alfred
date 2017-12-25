@@ -9,4 +9,6 @@ install:
 
 script:
     - ./bin/test
+
+after_success:
     - coveralls
