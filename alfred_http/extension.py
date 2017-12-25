@@ -2,7 +2,8 @@ from flask_cors import CORS
 
 from alfred.app import Extension
 from alfred.extension import CoreExtension
-from alfred_http.endpoints import NestedEndpointRepository, EndpointUrlBuilder
+from alfred_http.endpoints import NestedEndpointRepository, EndpointUrlBuilder, \
+    ErrorResponseMetaRepository, EmptyResponseMeta
 from alfred_http.flask.app import FlaskApp
 
 
@@ -36,3 +37,14 @@ class HttpExtension(Extension):
     @Extension.service()
     def _urls(self):
         return EndpointUrlBuilder(self._app.service('http', 'endpoints'))
+
+    @Extension.service()
+    def _error_response_metas(self):
+        metas = ErrorResponseMetaRepository()
+        for tagged_meta in self._app.services(tag='error_response_meta'):
+            metas.add_meta(tagged_meta)
+        return metas
+
+    @Extension.service(tags=('error_response_meta',), weight=999)
+    def _empty_error_response_meta(self):
+        return EmptyResponseMeta()

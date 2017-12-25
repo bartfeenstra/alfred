@@ -1,7 +1,8 @@
 import abc
 import json
-from typing import Dict, Iterable
+from typing import Dict
 
+import itertools
 from contracts import contract
 from flask import Request as HttpRequest
 
@@ -12,7 +13,7 @@ from alfred_http.endpoints import Endpoint, EndpointUrlBuilder, \
     MessageMeta, \
     Response, SuccessResponse, SuccessResponseMeta, \
     NonConfigurableGetRequestMeta, NonConfigurableRequest, RequestMeta, \
-    Request, ErrorResponse, NotFoundError
+    Request, ErrorResponse, NotFoundError, ErrorResponseMetaRepository
 from alfred_rest import base64_decodes
 from alfred_rest.json import Rewriter, IdentifiableDataType, ListType, \
     SchemaRepository, SchemaNotFound
@@ -110,8 +111,9 @@ class JsonResponseMeta(SuccessResponseMeta, JsonMessageMeta):
 
 
 class RestErrorResponseMeta(JsonResponseMeta):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    @contract
+    def __init__(self, urls: EndpointUrlBuilder):
+        super().__init__('rest-error', urls)
         self._data_type = ErrorResponseType()
 
     def to_json(self, response, content_type):
@@ -119,59 +121,6 @@ class RestErrorResponseMeta(JsonResponseMeta):
 
     def get_json_schema(self):
         return self._data_type
-
-
-class RestResponseMeta(RestErrorResponseMeta):
-    def to_json(self, response, content_type):
-        if isinstance(response, SuccessResponse):
-            return self.to_success_json(response,
-                                        content_type)
-        return super().to_json(response, content_type)
-
-    def get_json_schema(self):
-        return {
-            'anyOf': [
-                super().get_json_schema(),
-                self.get_success_json_schema(),
-            ],
-        }
-
-    @abc.abstractmethod
-    @contract
-    def get_success_json_schema(self) -> Dict:
-        pass
-
-    @abc.abstractmethod
-    @contract
-    def to_success_json(self, response: Response,
-                        content_type: str):
-        pass
-
-
-class RestResourcesResponseMeta(RestResponseMeta):
-    def get_success_json_schema(self):
-        return {
-            'type': 'array',
-            'items': {
-                'type': self._get_resource_type()
-            },
-        }
-
-    @abc.abstractmethod
-    @contract
-    def _get_resource_type(self) -> ResourceType:
-        pass
-
-    @abc.abstractmethod
-    @contract
-    def _get_resources(self) -> Iterable:
-        pass
-
-    def to_success_json(self, response, content_type):
-        items = []
-        for resource in self._get_resources():
-            items.append(self._get_resource_type().to_json(resource))
-        return items
 
 
 class JsonSchemaResponse(SuccessResponse):
@@ -186,7 +135,7 @@ class JsonSchemaResponse(SuccessResponse):
         return self._schema
 
 
-class JsonSchemaResponseMeta(RestResponseMeta, AppAwareFactory):
+class JsonSchemaResponseMeta(JsonResponseMeta, AppAwareFactory):
     NAME = 'schema'
 
     @contract
@@ -202,21 +151,15 @@ class JsonSchemaResponseMeta(RestResponseMeta, AppAwareFactory):
     def get_content_types(self):
         return ['application/schema+json']
 
-    def to_http_response(self, response, content_type):
-        http_response = super().to_http_response(response, content_type)
-        http_response.status = '200'
-        return http_response
-
-    def to_success_json(self, response, content_type):
+    def to_json(self, response, content_type):
         assert isinstance(response, JsonSchemaResponse)
         schema = response.schema
         self._rewriter.rewrite(schema)
         return schema
 
-    def get_success_json_schema(self):
+    def get_json_schema(self):
         return {
             '$ref': 'http://json-schema.org/draft-04/schema#',
-            'description': 'A JSON Schema.',
         }
 
 
@@ -225,41 +168,48 @@ class JsonSchemaEndpoint(Endpoint, AppAwareFactory):
 
     @contract
     def __init__(self, factory: Factory, endpoints: EndpointRepository,
-                 urls: EndpointUrlBuilder):
+                 urls: EndpointUrlBuilder, error_response_metas: ErrorResponseMetaRepository):
         super().__init__(factory, self.NAME,
                          '/about/json/schema',
                          NonConfigurableGetRequestMeta,
                          JsonSchemaResponseMeta)
         self._endpoints = endpoints
         self._urls = urls
+        self._error_response_metas = error_response_metas
 
     @classmethod
     def from_app(cls, app):
         return cls(app.factory, app.service('http', 'endpoints'),
-                   app.service('http', 'urls'))
+                   app.service('http', 'urls'), app.service('http', 'error_response_metas'))
 
     def handle(self, request):
         assert isinstance(request, NonConfigurableRequest)
+
         schema = {
             'id': self._urls.build(self.name),
             '$schema': 'http://json-schema.org/draft-04/schema#',
+            'description': 'The Alfred JSON Schema. Any data matches subschemas under #/definitions only.',
             # Prevent most values from validating against the top-level schema.
             'enum': [None],
-            'definitions': {
-                'request': {},
-                'response': {},
-            },
+            'definitions': {},
         }
-        for request_meta in self._endpoints.get_request_metas():
+
+        request_metas = self._endpoints.get_request_metas()
+        for request_meta in request_metas:
+            schema['definitions'].setdefault('request', {})
             if isinstance(request_meta, JsonMessageMeta):
                 schema['definitions']['request'][
                     request_meta.name] = request_meta.get_json_schema(
                 )
-        for response_meta in self._endpoints.get_response_metas():
+
+        response_metas = itertools.chain(self._endpoints.get_response_metas(), self._error_response_metas.get_metas())
+        for response_meta in response_metas:
+            schema['definitions'].setdefault('response', {})
             if isinstance(response_meta, JsonMessageMeta):
                 schema['definitions']['response'][
                     response_meta.name] = response_meta.get_json_schema(
                 )
+
         return JsonSchemaResponse(schema)
 
 
@@ -274,7 +224,7 @@ class ExternalJsonSchemaRequestMeta(RequestMeta):
         return ExternalJsonSchemaRequest(base64_decodes(parameters['id']))
 
     def get_content_types(self):
-        return []
+        return ['']
 
 
 class ExternalJsonSchemaRequest(Request):

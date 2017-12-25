@@ -4,12 +4,12 @@ from urllib.parse import urlparse
 from contracts import contract
 from flask import Flask, request as current_http_request
 from flask.views import MethodView
-from werkzeug.exceptions import NotAcceptable
 from werkzeug.local import LocalProxy
 
 from alfred.app import App
 from alfred_http.endpoints import Error, \
-    ErrorResponse, Endpoint, Request
+    ErrorResponse, Endpoint, Request, NotAcceptableError, \
+    UnsupportedMediaTypeError
 
 
 class FlaskApp(Flask):
@@ -34,25 +34,32 @@ class FlaskApp(Flask):
             path = path.replace('{', '<').replace('}', '>')
             self.add_url_rule(path, endpoint=route_name,
                               view_func=EndpointView.as_view(endpoints[0].path,
+                                                             self._app,
                                                              endpoints))
 
 
 class EndpointView(MethodView):
-    def __init__(self, endpoints: List):
+    @contract
+    def __init__(self, app: App, endpoints: List):
         for endpoint in endpoints:
             setattr(self, endpoint.request_meta.method.lower(),
-                    self._build_view(endpoint))
+                    self._build_view(app, endpoint))
 
     @staticmethod
-    def _build_view(endpoint: Endpoint):
+    @contract
+    def _build_view(app: App, endpoint: Endpoint):
         def _view(**kwargs):
-            # Check we can deliver the right content type.
-            content_type = current_http_request.accept_mimetypes.best_match(
-                endpoint.response_meta.get_content_types())
-            if content_type is None:
-                raise NotAcceptable()
-
             try:
+                # Check we can produce the requested content type.
+                content_type = current_http_request.accept_mimetypes.best_match(
+                    endpoint.response_meta.get_content_types())
+                if content_type is None:
+                    raise NotAcceptableError()
+
+                # Check the request consumes the provided content type.
+                if current_http_request.mimetype not in endpoint.request_meta.get_content_types():
+                    raise UnsupportedMediaTypeError()
+
                 alfred_request = endpoint.request_meta.from_http_request(
                     # Because Werkzeug uses duck-typed proxies, we access a
                     # protected method to get the real request, so it passes
@@ -63,10 +70,29 @@ class EndpointView(MethodView):
                     kwargs)
                 assert isinstance(alfred_request, Request)
                 alfred_response = endpoint.handle(alfred_request)
+                return endpoint.response_meta.to_http_response(alfred_response,
+                                                               content_type)
             except Error as e:
                 alfred_response = ErrorResponse().with_error(e)
+                metas = app.service('http', 'error_response_metas').get_metas()
+                metas_by_content_type = {}
+                for meta in metas:
+                    for content_type in meta.get_content_types():
+                        metas_by_content_type.setdefault(content_type, [])
+                        metas_by_content_type[content_type].append(meta)
+                empty_metas = metas_by_content_type['']
+                del metas_by_content_type['']
 
-            return endpoint.response_meta.to_http_response(alfred_response,
-                                                           content_type)
+                # Check we can produce the requested content type.
+                content_type = current_http_request.accept_mimetypes.best_match(
+                    metas_by_content_type.keys())
+                # Fall back to not including any content at all.
+                if content_type is None:
+                    content_type = ''
+                    meta = empty_metas[0]
+                else:
+                    meta = metas_by_content_type[content_type][0]
+
+                return meta.to_http_response(alfred_response, content_type)
 
         return _view

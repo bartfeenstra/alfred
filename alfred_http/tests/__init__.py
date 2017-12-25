@@ -60,7 +60,7 @@ class HttpTestCase(TestCase):
         if 0 > status < 10:
             self.assertEquals(str(response.status_code)[0], status)
         else:
-            self.assertEquals(response.status_code, 200)
+            self.assertEquals(response.status_code, status)
 
     @contract
     def assertResponseContentType(self, content_type: str, response):

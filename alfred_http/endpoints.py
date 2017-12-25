@@ -40,6 +40,20 @@ class NotFoundError(Error):
         super().__init__(self.CODE, 'Not found', 404)
 
 
+class NotAcceptableError(Error):
+    CODE = 'not_acceptable'
+
+    def __init__(self):
+        super().__init__(self.CODE, 'Not acceptable', 406)
+
+
+class UnsupportedMediaTypeError(Error):
+    CODE = 'unsupported_media_type'
+
+    def __init__(self):
+        super().__init__(self.CODE, 'Unsupported media type', 415)
+
+
 class BadGatewayError(Error):
     CODE = 'bad_gateway'
 
@@ -124,7 +138,7 @@ class NonConfigurableRequestMeta(RequestMeta):
         return NonConfigurableRequest()
 
     def get_content_types(self):
-        return []
+        return ['']
 
 
 class NonConfigurableGetRequestMeta(NonConfigurableRequestMeta):
@@ -142,7 +156,7 @@ class Response(Message):
 
 class ResponseMeta(MessageMeta):
     @contract
-    def to_http_response(self, response, content_type: str) -> HttpResponse:
+    def to_http_response(self, response: Response, content_type: str) -> HttpResponse:
         """
         Converts an API response to an HTTP response.
         :param response:
@@ -150,6 +164,7 @@ class ResponseMeta(MessageMeta):
         """
         assert content_type in self.get_content_types()
         http_response = HttpResponse()
+        http_response.status = str(response.http_response_status_code)
         http_response.headers.set('Content-Type', content_type)
         return http_response
 
@@ -161,10 +176,7 @@ class SuccessResponse(Response):
 
 
 class SuccessResponseMeta(ResponseMeta):
-    def to_http_response(self, response, content_type):
-        http_response = super().to_http_response(response, content_type)
-        http_response.status = str(response.http_response_status_code)
-        return http_response
+    pass
 
 
 class ErrorResponse(Response):
@@ -187,6 +199,28 @@ class ErrorResponse(Response):
 
         # We assume the first error is somehow the most important one.
         return self._errors[0].http_response_status_code
+
+
+class EmptyResponseMeta(ResponseMeta):
+    def __init__(self):
+        super().__init__('empty')
+
+    def get_content_types(self):
+        return ['']
+
+
+class ErrorResponseMetaRepository(with_metaclass(ContractsMeta)):
+    def __init__(self):
+        self._metas = {}
+
+    @contract
+    def add_meta(self, meta: ResponseMeta):
+        assert meta.name not in self._metas
+        self._metas[meta.name] = meta
+
+    @contract
+    def get_metas(self) -> Iterable:
+        return self._metas.values()
 
 
 class Endpoint(with_metaclass(ContractsMeta)):

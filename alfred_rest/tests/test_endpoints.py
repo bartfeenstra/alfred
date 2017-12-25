@@ -1,6 +1,5 @@
 from jsonschema import validate
 
-from alfred_http.endpoints import NotFoundError
 from alfred_rest import base64_encodes, json_schema
 from alfred_rest.tests import RestTestCase
 
@@ -16,15 +15,7 @@ class JsonSchemaEndpointTest(RestTestCase):
         actual_schema = response.json()
         validate(actual_schema, json_schema())
         expected_response_schema = {
-            'anyOf': [
-                {
-                    '$ref': 'http://127.0.0.1:5000/about/json/schema#/definitions/response/error',
-                },
-                {
-                    '$ref': 'http://127.0.0.1:5000/about/json/external-schema/aHR0cDovL2pzb24tc2NoZW1hLm9yZy9kcmFmdC0wNC9zY2hlbWE%3D',
-                    'description': 'A JSON Schema.'
-                }
-            ],
+            '$ref': 'http://127.0.0.1:5000/about/json/external-schema/aHR0cDovL2pzb24tc2NoZW1hLm9yZy9kcmFmdC0wNC9zY2hlbWE%3D'
         }
         self.assertIn('definitions', actual_schema)
         self.assertIn('response', actual_schema['definitions'])
@@ -63,4 +54,4 @@ class ExternalJsonSchemaEndpointTest(RestTestCase):
             'Accept': content_type,
         })
         self.assertResponseStatus(404, response)
-        self.assertRestErrorResponse((NotFoundError.CODE,), response)
+        self.assertResponseContentType('', response)

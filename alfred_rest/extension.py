@@ -4,7 +4,7 @@ from alfred_http.endpoints import EndpointFactoryRepository
 from alfred_http.extension import HttpExtension
 from alfred_rest import json_schema
 from alfred_rest.endpoints import JsonSchemaEndpoint, \
-    ExternalJsonSchemaEndpoint
+    ExternalJsonSchemaEndpoint, RestErrorResponseMeta
 from alfred_rest.json import Validator, NestedRewriter, \
     IdentifiableDataTypeAggregator, \
     ExternalReferenceProxy, SchemaRepository
@@ -57,3 +57,7 @@ class RestExtension(Extension):
             JsonSchemaEndpoint,
             ExternalJsonSchemaEndpoint,
         ])
+
+    @Extension.service(tags=('error_response_meta',))
+    def _rest_error_response_meta(self):
+        return RestErrorResponseMeta(self._app.service('http', 'urls'))

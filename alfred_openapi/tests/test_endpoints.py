@@ -1,6 +1,6 @@
-import requests
 from jsonschema import validate
 
+from alfred_openapi import openapi_schema
 from alfred_openapi.tests import OpenApiTestCase
 
 
@@ -12,8 +12,7 @@ class OpenApiEndpointTest(OpenApiTestCase):
         self.assertResponseStatus(200, response)
         self.assertResponseContentType('application/json', response)
         spec = response.json()
-        schema = requests.get(
-            'https://raw.githubusercontent.com/OAI/OpenAPI-Specification/master/schemas/v2.0/schema.json').json()
+        schema = openapi_schema()
         validate(spec, schema)
 
     def testEndpointWithHtml(self):
