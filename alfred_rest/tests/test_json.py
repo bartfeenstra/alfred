@@ -1,13 +1,12 @@
 from copy import copy
 from unittest import TestCase
-from unittest.mock import MagicMock
 
 from jsonschema import ValidationError
 
-from alfred_http.endpoints import EndpointUrlBuilder
+from alfred.tests import data_provider
 from alfred_rest.json import Validator, IdentifiableDataTypeAggregator, \
     Rewriter, NestedRewriter, IdentifiableDataType, SchemaRepository, \
-    SchemaNotFound
+    SchemaNotFound, DataType, ListType, ScalarType
 from alfred_rest.tests import RestTestCase
 
 SCHEMA = {
@@ -23,6 +22,76 @@ SCHEMA = {
     },
     'required': ['fruit_name'],
 }
+
+
+class ListTypeTest(TestCase):
+    class IntegerItemType(DataType):
+        def to_json(self, data):
+            return data * 2
+
+    def testToJson(self):
+        item_type = self.IntegerItemType()
+        sut = ListType(item_type)
+        data = [3, 1, 4]
+        actual_json = sut.to_json(data)
+        expected_json = [6, 2, 8]
+        self.assertEquals(actual_json, expected_json)
+
+
+def valid_scalar_schemas():
+    return {
+        'string': ({
+            'type': 'string',
+        },),
+        'number': ({
+            'type': 'number',
+        },),
+        'boolean': ({
+            'type': 'boolean',
+        },),
+        'enum': ({
+            'enum': [1, 'One', True],
+        },),
+    }
+
+
+def invalid_scalar_schemas():
+    return {
+        'object': ({
+            'type': 'object',
+        },),
+        'array': ({
+            'type': 'array',
+        },),
+        'enum_with_array': ({
+            'enum': [[1, 'One', True], ],
+        },),
+    }
+
+
+class ScalarTypeTest(TestCase):
+    @data_provider(valid_scalar_schemas)
+    def testInitWithValidScalarSchemas(self, schema):
+        ScalarType(schema)
+
+    @data_provider(invalid_scalar_schemas)
+    def testInitWithInvalidScalarSchemas(self, schema):
+        with self.assertRaises(ValueError):
+            ScalarType(schema)
+
+    def testToJson(self):
+        sut = ScalarType({
+            'type': 'number',
+        })
+        data = 3
+        self.assertEquals(sut.to_json(data), 3)
+
+    def testFromJson(self):
+        sut = ScalarType({
+            'type': 'number',
+        })
+        data = 3
+        self.assertEquals(sut.from_json(data), 3)
 
 
 class ValidatorTest(TestCase):
@@ -46,10 +115,7 @@ class ValidatorTest(TestCase):
 
 class IdentifiableDataTypeAggregatorTest(TestCase):
     def testRewriteWithoutDataTypes(self):
-        urls = MagicMock(EndpointUrlBuilder)
-        urls.build = MagicMock(
-            return_value='http://127.0.0.1/about/json/schema')
-        sut = IdentifiableDataTypeAggregator(urls)
+        sut = IdentifiableDataTypeAggregator()
         original_schema = {
             'id': 'https://example.com/schema',
             'foo': {
@@ -66,13 +132,9 @@ class IdentifiableDataTypeAggregatorTest(TestCase):
         rewritten_schema = copy(original_schema)
         sut.rewrite(original_schema)
         self.assertEqual(original_schema, rewritten_schema)
-        urls.build.assert_called_once_with('schema')
 
     def testRewriteSimpleDataType(self):
-        urls = MagicMock(EndpointUrlBuilder)
-        urls.build = MagicMock(
-            return_value='http://127.0.0.1/about/json/schema')
-        sut = IdentifiableDataTypeAggregator(urls)
+        sut = IdentifiableDataTypeAggregator()
         original_schema = {
             'id': 'https://example.com/schema',
             'foo': IdentifiableDataType({
@@ -82,7 +144,7 @@ class IdentifiableDataTypeAggregatorTest(TestCase):
         expected_schema = {
             'id': 'https://example.com/schema',
             'foo': {
-                '$ref': 'http://127.0.0.1/about/json/schema#/definitions/data/Foo',
+                '$ref': '#/definitions/data/Foo',
             },
             'definitions': {
                 'data': {
@@ -94,13 +156,9 @@ class IdentifiableDataTypeAggregatorTest(TestCase):
         }
         rewritten_schema = sut.rewrite(original_schema)
         self.assertEqual(rewritten_schema, expected_schema)
-        urls.build.assert_called_once_with('schema')
 
     def testRewriteNestedDataTypes(self):
-        urls = MagicMock(EndpointUrlBuilder)
-        urls.build = MagicMock(
-            return_value='http://127.0.0.1/about/json/schema')
-        sut = IdentifiableDataTypeAggregator(urls)
+        sut = IdentifiableDataTypeAggregator()
         original_schema = {
             'id': 'https://example.com/schema',
             'foo': IdentifiableDataType({
@@ -118,13 +176,13 @@ class IdentifiableDataTypeAggregatorTest(TestCase):
         expected_schema = {
             'id': 'https://example.com/schema',
             'foo': {
-                '$ref': 'http://127.0.0.1/about/json/schema#/definitions/data/Foo',
+                '$ref': '#/definitions/data/Foo',
             },
             'bar': {
                 'type': 'object',
                 'properties': {
                     'baz': {
-                        '$ref': 'http://127.0.0.1/about/json/schema#/definitions/data/Baz',
+                        '$ref': '#/definitions/data/Baz',
                     },
                 },
             },
@@ -141,13 +199,9 @@ class IdentifiableDataTypeAggregatorTest(TestCase):
         }
         rewritten_schema = sut.rewrite(original_schema)
         self.assertEqual(rewritten_schema, expected_schema)
-        urls.build.assert_called_once_with('schema')
 
     def testRewriteDuplicateDataTypes(self):
-        urls = MagicMock(EndpointUrlBuilder)
-        urls.build = MagicMock(
-            return_value='http://127.0.0.1/about/json/schema')
-        sut = IdentifiableDataTypeAggregator(urls)
+        sut = IdentifiableDataTypeAggregator()
         data_type = IdentifiableDataType({
             'type': 'float',
         }, 'Foo')
@@ -159,10 +213,10 @@ class IdentifiableDataTypeAggregatorTest(TestCase):
         expected_schema = {
             'id': 'https://example.com/schema',
             'foo': {
-                '$ref': 'http://127.0.0.1/about/json/schema#/definitions/data/Foo',
+                '$ref': '#/definitions/data/Foo',
             },
             'foo2': {
-                '$ref': 'http://127.0.0.1/about/json/schema#/definitions/data/Foo',
+                '$ref': '#/definitions/data/Foo',
             },
             'definitions': {
                 'data': {
@@ -174,7 +228,53 @@ class IdentifiableDataTypeAggregatorTest(TestCase):
         }
         rewritten_schema = sut.rewrite(original_schema)
         self.assertEqual(rewritten_schema, expected_schema)
-        urls.build.assert_called_once_with('schema')
+
+    def testRewriteExistingDefinition(self):
+        sut = IdentifiableDataTypeAggregator()
+        data_type_foo = IdentifiableDataType({
+            'type': 'float',
+        }, 'Foo')
+        data_type_bar = IdentifiableDataType({
+            'type': 'array',
+            'items': data_type_foo,
+        }, 'Bar')
+        data_type_baz = IdentifiableDataType({
+            'type': 'array',
+            'items': data_type_bar,
+        }, 'Baz')
+        original_schema = {
+            'id': 'https://example.com/schema',
+            'definitions': {
+                'data': {
+                    'Bar': data_type_bar,
+                    'Baz': data_type_baz,
+                },
+            },
+        }
+        expected_schema = {
+            'id': 'https://example.com/schema',
+            'definitions': {
+                'data': {
+                    'Foo': {
+                        'type': 'float',
+                    },
+                    'Bar': {
+                        'type': 'array',
+                        'items': {
+                            '$ref': '#/definitions/data/Foo',
+                        },
+                    },
+                    'Baz': {
+                        'type': 'array',
+                        'items': {
+                            '$ref': '#/definitions/data/Bar',
+                        },
+                    },
+                },
+            },
+        }
+        rewritten_schema = sut.rewrite(original_schema)
+        self.assertEqual(rewritten_schema, expected_schema)
 
 
 class ExternalReferenceProxyTest(RestTestCase):
@@ -258,7 +358,7 @@ class NestedRewriterTest(RestTestCase):
             schema['required'].append('meow')
             return schema
 
-    def testRewritePointerWithNonStringShouldPassThrough(self):
+    def testRewrite(self):
         sut = NestedRewriter()
         sut.add_rewriter(self.DogRewriter())
         sut.add_rewriter(self.CatRewriter())

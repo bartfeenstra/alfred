@@ -5,6 +5,7 @@ import requests
 from contracts import contract
 from flask import Response as HttpResponse
 
+from alfred import indent, format_iter
 from alfred.app import App
 from alfred.tests import expand_data
 from alfred_http.endpoints import Endpoint
@@ -45,14 +46,47 @@ class HttpTestCase(TestCase):
         self._flask_app_context.pop()
 
     def request(self, endpoint_name: str,
-                parameters: Optional[Dict] = None, headers: Optional[Dict]=None) -> HttpResponse:
+                parameters: Optional[Dict] = None,
+                headers: Optional[Dict] = None) -> HttpResponse:
         urls = self._app.service('http', 'urls')
         url = urls.build(endpoint_name, parameters)
         endpoints = self._app.service('http', 'endpoints')
         endpoint = endpoints.get_endpoint(endpoint_name)
         assert isinstance(endpoint, Endpoint)
         # @todo Ensure we only pass query parameters to `requests`.
-        return getattr(requests, endpoint.request_meta.method.lower())(url, params=parameters, headers=headers)
+        response = getattr(requests, endpoint.request_meta.method.lower())(url,
+                                                                           params=parameters,
+                                                                           headers=headers)
+
+        # Validate the content headers.
+        accepted_content_types = []
+        if headers is not None and 'Accept' in headers:
+            for accept in headers['Accept'].split(','):
+                if ';' in accept:
+                    position = accept.index(';')
+                    accept = accept[0:position]
+                accepted_content_types.append(accept)
+        accepted_content_types = [ct for ct in accepted_content_types if ct]
+        if not (
+                # The client accepts any response.
+                not accepted_content_types or
+                # An accepted success or error response.
+                response.headers['Content-Type'] in accepted_content_types or
+                # An empty error response.
+                400 <= response.status_code < 600 and
+                ('Content-Type' not in response.headers or
+                 not response.headers['Content-Type']) and
+                ('Content-Length' not in response.headers or
+                 not int(response.headers['Content-Length']))
+        ):
+            empty = 'a non-empty' if len(response.text) > 0 else 'an empty'
+            raise AssertionError(
+                '%s returned %s "%s" HTTP %d response, but it must either respond with an empty HTTP 4xx or 5xx response, or one of the following content types:\n%s.' % (
+                    url, empty, response.headers['Content-Type'],
+                    response.status_code,
+                    indent(format_iter(accepted_content_types))))
+
+        return response
 
     @contract
     def assertResponseStatus(self, status: int, response):

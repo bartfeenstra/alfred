@@ -4,7 +4,8 @@ from alfred_http.endpoints import EndpointFactoryRepository
 from alfred_http.extension import HttpExtension
 from alfred_rest import json_schema
 from alfred_rest.endpoints import JsonSchemaEndpoint, \
-    ExternalJsonSchemaEndpoint, RestErrorResponseMeta
+    ExternalJsonSchemaEndpoint, RestErrorResponseMeta, \
+    ResourceEndpointRepository
 from alfred_rest.json import Validator, NestedRewriter, \
     IdentifiableDataTypeAggregator, \
     ExternalReferenceProxy, SchemaRepository
@@ -31,9 +32,8 @@ class RestExtension(Extension):
         return rewriter
 
     @Extension.service(tags=('json_schema_rewriter',))
-    def _internal_reference_aggregator(self):
-        return IdentifiableDataTypeAggregator(
-            self._app.service('http', 'urls'))
+    def _identifiable_data_type_aggregator(self):
+        return IdentifiableDataTypeAggregator()
 
     @Extension.service(tags=('json_schema_rewriter',))
     def _external_reference_proxy(self):
@@ -58,6 +58,17 @@ class RestExtension(Extension):
             ExternalJsonSchemaEndpoint,
         ])
 
+    @Extension.service(tags=('http_endpoints',))
+    def _resource_endpoints(self):
+        return ResourceEndpointRepository(self._app.service('rest', 'resources').values(), self._app.factory)
+
     @Extension.service(tags=('error_response_meta',))
     def _rest_error_response_meta(self):
         return RestErrorResponseMeta(self._app.service('http', 'urls'))
+
+    @Extension.service()
+    def _resources(self):
+        resources = {}
+        for tagged_resources in self._app.services(tag='resources'):
+            resources[tagged_resources.get_type().name] = tagged_resources
+        return resources

@@ -104,14 +104,14 @@ class RequestMeta(MessageMeta):
     @abc.abstractmethod
     @contract
     def from_http_request(self, http_request: HttpRequest,
-                          parameters: Dict) -> Request:
+                          path_parameters: Dict) -> Request:
         """
         Converts an HTTP request to an API request.
 
         The HTTP request SHOULD be valid for this request. If it is not,
         exceptions may be raised.
         :param http_request:
-        :param parameters:
+        :param path_parameters:
         :return:
         """
         pass
@@ -134,7 +134,7 @@ class NonConfigurableRequestMeta(RequestMeta):
     def __init__(self, method: str):
         super().__init__('non-configurable-%s' % method.lower(), method)
 
-    def from_http_request(self, http_request, parameters):
+    def from_http_request(self, http_request, path_parameters):
         return NonConfigurableRequest()
 
     def get_content_types(self):
@@ -156,7 +156,8 @@ class Response(Message):
 
 class ResponseMeta(MessageMeta):
     @contract
-    def to_http_response(self, response: Response, content_type: str) -> HttpResponse:
+    def to_http_response(self, response: Response,
+                         content_type: str) -> HttpResponse:
         """
         Converts an API response to an HTTP response.
         :param response:
@@ -220,7 +221,7 @@ class ErrorResponseMetaRepository(with_metaclass(ContractsMeta)):
 
     @contract
     def get_metas(self) -> Iterable:
-        return self._metas.values()
+        return list(self._metas.values())
 
 
 class Endpoint(with_metaclass(ContractsMeta)):
@@ -307,59 +308,16 @@ class ResponseNotFound(RuntimeError):
 
 
 class EndpointRepository(with_metaclass(ContractsMeta)):
-    def __init__(self):
-        self._request_metas = None
-        self._response_metas = None
-
     def get_endpoint(self, endpoint_name: str) -> Optional[Endpoint]:
-        pass
+        endpoints = self.get_endpoints()
+        for endpoint in endpoints:
+            if endpoint_name == endpoint.name:
+                return endpoint
+        raise EndpointNotFound(endpoint_name, endpoints)
 
     @contract
     def get_endpoints(self) -> Iterable:
         pass
-
-    def get_request_meta(self, request_name: str) -> Optional[RequestMeta]:
-        if self._request_metas is None:
-            self._aggregate_metas()
-
-        for request_meta in self._request_metas:
-            if request_name == request_meta.name:
-                return request_meta
-        raise RequestNotFound(request_name, self._request_metas)
-
-    @contract
-    def get_request_metas(self) -> Iterable:
-        if self._request_metas is None:
-            self._aggregate_metas()
-
-        return self._request_metas
-
-    def get_response_meta(self, response_name: str) -> Optional[ResponseMeta]:
-        if self._request_metas is None:
-            self._aggregate_metas()
-
-        for response_meta in self._response_metas:
-            if response_name == response_meta.name:
-                return response_meta
-        raise ResponseNotFound(response_name, self._response_metas)
-
-    @contract
-    def get_response_metas(self) -> Iterable:
-        if self._response_metas is None:
-            self._aggregate_metas()
-
-        return self._response_metas
-
-    def _aggregate_metas(self):
-        request_metas = {}
-        response_metas = {}
-        for endpoint in self.get_endpoints():
-            request_metas.setdefault(
-                endpoint.request_meta.name, endpoint.request_meta)
-            response_metas.setdefault(
-                endpoint.response_meta.name, endpoint.response_meta)
-        self._request_metas = request_metas.values()
-        self._response_metas = response_metas.values()
 
 
 class StaticEndpointRepository(EndpointRepository):

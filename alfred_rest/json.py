@@ -14,30 +14,64 @@ from alfred_rest import base64_encodes
 
 class DataType(dict):
     @abc.abstractmethod
-    def to_json(self, resource):
+    def to_json(self, data):
         pass
+
+
+class InputDataType(dict):
+    @abc.abstractmethod
+    def from_json(self, data):
+        pass
+
+
+class ScalarType(DataType, InputDataType):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.assert_valid_scalar_type(self)
+
+    def from_json(self, data):
+        return data
+
+    def to_json(self, data):
+        return data
+
+    @staticmethod
+    @contract
+    def assert_valid_scalar_type(schema: Dict):
+        if 'enum' in schema:
+            for value in schema['enum']:
+                if not isinstance(value,
+                                  (str, int, float, bool)) or value is None:
+                    raise ValueError(
+                        'Request parameters must contain scalars only, but an enum with %s "%s" was given.' % (
+                            type(value), value))
+            return
+        if 'type' in schema:
+            if schema['type'] not in ('string', 'number', 'boolean'):
+                raise ValueError(
+                    'Request parameters must contain scalars only, but %s was given.' %
+                    schema['type'])
+            return
+        raise ValueError('Schema does not represent a scalar value.')
 
 
 class ListType(DataType):
     @contract
-    def __init__(self, data_type: DataType):
+    def __init__(self, item_type: DataType):
         super().__init__({
             'type': 'array',
-            'items': data_type,
+            'items': item_type,
         })
-        self._data_type = data_type
+        self._item_type = item_type
 
-    def to_json(self, resource):
-        data = []
-        for item in resource:
-            data.append(self._data_type.to_json(item))
-        return data
+    def to_json(self, data):
+        return list(map(self._item_type.to_json, data))
 
 
 class IdentifiableDataType(DataType):
     """
     These are JSON Schemas that provide metadata so they can be aggregated and
-    re-used throughout a schema. See InternalReferenceAggregator.
+    re-used throughout a schema. See IdentifiableDataTypeAggregator.
     """
 
     @contract
@@ -57,6 +91,10 @@ class IdentifiableDataType(DataType):
         return self._name
 
 
+class IdentifiableScalarType(IdentifiableDataType, ScalarType):
+    pass
+
+
 class Rewriter(with_metaclass(ContractsMeta)):
     @abc.abstractmethod
     @contract
@@ -69,14 +107,11 @@ class IdentifiableDataTypeAggregator(Rewriter):
     Rewrites a JSON Schema's IdentifiableDataTypes.
     """
 
-    def __init__(self, urls: EndpointUrlBuilder):
-        self._schema_url = urls.build('schema')
-
     @contract
     def _rewrite_data_type(self, data_type: IdentifiableDataType,
                            definitions: Dict) -> Tuple:
         """
-        Rewrites an InternalReference.
+        Rewrites an IdentifiableDataType.
         """
         definitions.setdefault(data_type.group_name, {})
         if data_type.name not in definitions[data_type.group_name]:
@@ -87,23 +122,26 @@ class IdentifiableDataTypeAggregator(Rewriter):
             schema, definitions = self._rewrite(dict(data_type), definitions)
             definitions[data_type.group_name][data_type.name] = schema
         return {
-            '$ref': '%s#/definitions/%s/%s' % (self._schema_url,
-                                               data_type.group_name,
-                                               data_type.name),
+            '$ref': '#/definitions/%s/%s' % (data_type.group_name,
+                                             data_type.name),
         }, definitions
 
     def rewrite(self, schema):
-        definitions = {} if 'definitions' not in schema else schema['definitions']
-        schema, definitions = self._rewrite(schema, definitions)
-        # There is no reason we should omit empty definitions, except that
-        #  existing code does not always expect them.
-        if len(definitions) and len([x for x in definitions if len(x)]):
-            schema.setdefault('definitions', {})
-            schema['definitions'].update(definitions)
+        schema, definitions = self._rewrite(schema, {})
+        for data_type, data_definitions in definitions.items():
+            for data_name, data_definition in data_definitions.items():
+                # There is no reason we should omit empty definitions,
+                #  except that existing code does not always expect them.
+                schema.setdefault('definitions', {})
+                schema['definitions'].setdefault(data_type, {})
+                schema['definitions'][data_type][data_name] = data_definition
+
         return schema
 
     @contract
     def _rewrite(self, data, definitions: Dict) -> Tuple:
+        data = copy(data)
+        definitions = copy(definitions)
         if isinstance(data, IdentifiableDataType):
             return self._rewrite_data_type(data, definitions)
         if isinstance(data, List):
@@ -111,7 +149,6 @@ class IdentifiableDataTypeAggregator(Rewriter):
                 data[index], definitions = self._rewrite(item, definitions)
             return data, definitions
         elif isinstance(data, Dict):
-            data = copy(data)
             for key, item in data.items():
                 data[key], definitions = self._rewrite(item, definitions)
             return data, definitions
@@ -165,10 +202,7 @@ class ExternalReferenceProxy(Rewriter):
         return pointer
 
     def rewrite(self, schema):
-        schema = self._rewrite(schema)
-        if 'id' in schema:
-            schema['id'] = self.rewrite_pointer(schema['id'])
-        return schema
+        return self._rewrite(schema)
 
     def _rewrite(self, data):
         if isinstance(data, List):
