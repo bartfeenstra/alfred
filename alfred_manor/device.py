@@ -1,4 +1,5 @@
 from subprocess import call
+from typing import Dict
 
 from contracts import contract
 
@@ -8,14 +9,14 @@ _dmx_values = {
 }
 
 
-@contract()
-def dmx_get_values() -> dict:
+@contract
+def dmx_get_values() -> Dict:
     global _dmx_values
     return _dmx_values
 
 
 @contract
-def dmx_set_values(color: str, luminosity: int) -> dict:
+def dmx_set_values(color: str, luminosity: int) -> Dict:
     # This assumes:
     # - 4 identical lights.
     # - 7 channels per light (R, G, B, *, *, *, luminosity).
