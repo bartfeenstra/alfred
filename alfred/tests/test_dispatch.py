@@ -1,44 +1,50 @@
 import operator
+from typing import Callable
 from unittest import TestCase
+
+from contracts import contract
 
 from alfred.dispatch import dispatch
 
 
 class SomeClass:
     def __init__(self):
-        self._results = []
+        self.results = []
 
     @dispatch()
     def foo(self):
-        self._results.append('foo')
+        self.results = []
+        self.results.append('foo')
 
     @foo.register()
     def handler1(self):
-        self._results.append('handler1')
+        self.results.append('handler1')
 
     @foo.register()
     def handler2(self):
-        self._results.append('handler2')
+        self.results.append('handler2')
 
 
 class SomeChildClass(SomeClass):
     @SomeClass.foo.register()
     def handler3(self):
-        self._results.append('someChildHandler')
+        self.results.append('someChildHandler')
 
 
 class SomeOtherChildClass(SomeClass):
     @SomeClass.foo.register()
     def handler4(self):
-        self._results.append('someOtherChildHandler')
+        self.results.append('someOtherChildHandler')
 
 
 class InstanceMethodDispatchTest(TestCase):
     def testDispatch(self):
-        sut = SomeClass()
-        result = sut.foo()
-        self.assertEquals(result, None)
-        self.assertEquals(sut._results, ['foo', 'handler1', 'handler2'])
+        # Test twice for idempotency.
+        for _ in range(2):
+            sut = SomeClass()
+            result = sut.foo()
+            self.assertEquals(result, None)
+            self.assertEquals(sut.results, ['foo', 'handler1', 'handler2'])
 
     def testDispatchExecutesOwnedHandlersOnly(self):
         """
@@ -46,10 +52,13 @@ class InstanceMethodDispatchTest(TestCase):
         :return:
         """
         sut = SomeChildClass()
-        result = sut.foo()
-        self.assertEquals(result, None)
-        self.assertEquals(
-            sut._results, ['foo', 'handler1', 'handler2', 'someChildHandler'])
+        # Test for idempotency by running everything twice.
+        for _ in range(2):
+            result = sut.foo()
+            self.assertEquals(result, None)
+            self.assertEquals(
+                sut.results,
+                ['foo', 'handler1', 'handler2', 'someChildHandler'])
 
 
 class SomeReducedClass:
@@ -81,9 +90,12 @@ class SomeReducedOtherChildClass(SomeReducedClass):
 class ReducedInstanceMethodDispatchTest(TestCase):
     def testDispatch(self):
         sut = SomeReducedClass()
-        result = sut.foo()
-        self.assertEquals(result,
-                          ['fooResult', 'handler1Result', 'handler2Result'])
+        # Test twice for idempotency.
+        for _ in range(2):
+            result = sut.foo()
+            self.assertEquals(result,
+                              ['fooResult', 'handler1Result',
+                               'handler2Result'])
 
     def testDispatchExecutesOwnedHandlersOnly(self):
         """
@@ -91,9 +103,12 @@ class ReducedInstanceMethodDispatchTest(TestCase):
         :return:
         """
         sut = SomeReducedChildClass()
-        result = sut.foo()
-        self.assertEquals(result, [
-                          'fooResult', 'handler1Result', 'handler2Result', 'someReducedChildHandler'])
+        # Test twice for idempotency.
+        for _ in range(2):
+            result = sut.foo()
+            self.assertEquals(result, [
+                'fooResult', 'handler1Result', 'handler2Result',
+                'someReducedChildHandler'])
 
 
 @dispatch(reducer=operator.concat)
@@ -113,6 +128,36 @@ def handler2():
 
 class ReducedFunctionDispatchTest(TestCase):
     def testDispatch(self):
-        result = foo()
+        # Test twice for idempotency.
+        for _ in range(2):
+            result = foo()
+            self.assertEquals(
+                result, ['fooResult', 'handler1Result', 'handler2Result'])
+
+
+class InstanceMethodFactoryDispatchTest(TestCase):
+    class SomeClass:
+        def __init__(self):
+            self.results = []
+            self._factoried = []
+
+        @contract
+        def _factory(self, handler: Callable):
+            self._factoried.append(handler)
+            return handler
+
+        @dispatch(factory=_factory)
+        def foo(self):
+            self.results.append('foo')
+
+        @foo.register(factory=True)
+        def handler1(self):
+            self.results.append('handler1')
+
+    def testDispatch(self):
+        sut = self.SomeClass()
+        result = sut.foo()
+        self.assertEquals(result, None)
         self.assertEquals(
-            result, ['fooResult', 'handler1Result', 'handler2Result'])
+            sut.results, ['foo', 'handler1'])
+        self.assertEquals(sut._factoried, [self.SomeClass.handler1])
