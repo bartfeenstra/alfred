@@ -68,7 +68,7 @@ class GatewayTimeoutError(Error):
         super().__init__(self.CODE, 'Gateway timeout', 504)
 
 
-class MessageMeta(with_metaclass(ContractsMeta)):
+class MessageType(with_metaclass(ContractsMeta)):
     @contract
     def __init__(self, name: str):
         self._name = name
@@ -91,7 +91,7 @@ class Request(Message):
     pass
 
 
-class RequestMeta(MessageMeta):
+class RequestType(MessageType):
     _allowed_methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
 
     @contract
@@ -151,7 +151,7 @@ class NonConfigurableRequest(Request):
     pass
 
 
-class NonConfigurableRequestMeta(RequestMeta):
+class NonConfigurableRequestType(RequestType):
     """
     Defines a non-configurable request.
     """
@@ -167,7 +167,7 @@ class NonConfigurableRequestMeta(RequestMeta):
         return ['']
 
 
-class NonConfigurableGetRequestMeta(NonConfigurableRequestMeta):
+class NonConfigurableGetRequestType(NonConfigurableRequestType):
     def __init__(self):
         super().__init__('GET')
 
@@ -180,7 +180,7 @@ class Response(Message):
         pass
 
 
-class ResponseMeta(MessageMeta):
+class ResponseType(MessageType):
     @contract
     def to_http_response(self, response: Response,
                          content_type: str) -> HttpResponse:
@@ -241,7 +241,7 @@ class ErrorResponse(Response):
         return self._errors[0].http_response_status_code
 
 
-class EmptyResponseMeta(ResponseMeta):
+class EmptyResponseType(ResponseType):
     def __init__(self):
         super().__init__('empty')
 
@@ -249,29 +249,29 @@ class EmptyResponseMeta(ResponseMeta):
         return ['']
 
 
-class ErrorResponseMetaRepository(with_metaclass(ContractsMeta)):
+class ErrorResponseTypeRepository(with_metaclass(ContractsMeta)):
     def __init__(self):
-        self._metas = {}
+        self._types = {}
 
     @contract
-    def add_meta(self, meta: ResponseMeta):
-        assert meta.name not in self._metas
-        self._metas[meta.name] = meta
+    def add_type(self, type: ResponseType):
+        assert type.name not in self._types
+        self._types[type.name] = type
 
     @contract
-    def get_metas(self) -> Iterable:
-        return list(self._metas.values())
+    def get_types(self) -> Iterable:
+        return list(self._types.values())
 
 
 class Endpoint(with_metaclass(ContractsMeta)):
     @contract
     def __init__(self, name: str, path: str,
-                 request_meta: RequestMeta,
-                 response_meta: ResponseMeta):
+                 request_type: RequestType,
+                 response_type: ResponseType):
         self._name = name
         self._path = path
-        self._request_meta = request_meta
-        self._response_meta = response_meta
+        self._request_type = request_type
+        self._response_type = response_type
 
     @property
     @contract
@@ -285,13 +285,13 @@ class Endpoint(with_metaclass(ContractsMeta)):
 
     @property
     @contract
-    def request_meta(self) -> RequestMeta:
-        return self._request_meta
+    def request_type(self) -> RequestType:
+        return self._request_type
 
     @property
     @contract
-    def response_meta(self) -> ResponseMeta:
-        return self._response_meta
+    def response_type(self) -> ResponseType:
+        return self._response_type
 
     @abc.abstractmethod
     @contract
@@ -316,7 +316,7 @@ class EndpointNotFound(RuntimeError):
 
 class RequestNotFound(RuntimeError):
     def __init__(self, request_name: str,
-                 available_requests: Optional[Iterable[RequestMeta]] = None):
+                 available_requests: Optional[Iterable[RequestType]] = None):
         available_requests = list(
             available_requests) if available_requests is not None else []
         if not available_requests:
@@ -331,7 +331,7 @@ class RequestNotFound(RuntimeError):
 
 class ResponseNotFound(RuntimeError):
     def __init__(self, response_name: str,
-                 available_responses: Optional[Iterable[ResponseMeta]] = None):
+                 available_responses: Optional[Iterable[ResponseType]] = None):
         available_responses = list(
             available_responses) if available_responses is not None else []
         if not available_responses:

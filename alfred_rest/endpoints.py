@@ -6,10 +6,10 @@ from contracts import contract
 
 from alfred.app import App
 from alfred_http.endpoints import Endpoint, EndpointRepository, \
-    MessageMeta, \
-    Response, SuccessResponse, NonConfigurableGetRequestMeta, \
-    NonConfigurableRequest, RequestMeta, \
-    Request, ErrorResponse, NotFoundError, ResponseMeta
+    MessageType, \
+    Response, SuccessResponse, NonConfigurableGetRequestType, \
+    NonConfigurableRequest, RequestType, \
+    Request, ErrorResponse, NotFoundError, ResponseType
 from alfred_http.http import HttpRequest, HttpBody
 from alfred_rest import base64_decodes
 from alfred_rest.json import IdentifiableDataType, ListType, \
@@ -111,7 +111,7 @@ class ErrorResponseType(IdentifiableDataType):
         }
 
 
-class JsonMessageMeta(MessageMeta):
+class JsonMessageType(MessageType):
     def get_content_types(self):
         return ['application/json']
 
@@ -121,23 +121,25 @@ class JsonMessageMeta(MessageMeta):
         pass
 
 
-class JsonRequestMeta(RequestMeta, JsonMessageMeta):
-    @RequestMeta.validate_http_request.register()
+class JsonRequestType(RequestType, JsonMessageType):
+    @RequestType.validate_http_request.register()
     def _validate_http_request_body(self, http_request):
         validator = App.current.service('rest', 'json_validator')
-        validator.validate(json.loads(http_request.body.content), self.get_json_schema())
+        validator.validate(json.loads(
+            http_request.body.content), self.get_json_schema())
 
 
-class JsonResponseMeta(ResponseMeta, JsonMessageMeta):
-    @ResponseMeta._build_http_response.register()
+class JsonResponseType(ResponseType, JsonMessageType):
+    @ResponseType._build_http_response.register()
     def _build_http_response_body(self, response, content_type, http_response):
         data = self.to_json(response, content_type)
         http_response.body = HttpBody(json.dumps(data), content_type)
 
-    @ResponseMeta._build_http_response.register(weight=999)
+    @ResponseType._build_http_response.register(weight=999)
     def _build_http_response_body_validation(self, response, content_type, http_response):
         validator = App.current.service('rest', 'json_validator')
-        validator.validate(json.loads(http_response.body.content), self.get_json_schema())
+        validator.validate(json.loads(
+            http_response.body.content), self.get_json_schema())
 
     @abc.abstractmethod
     @contract
@@ -145,7 +147,7 @@ class JsonResponseMeta(ResponseMeta, JsonMessageMeta):
         pass
 
 
-class RestErrorResponseMeta(JsonResponseMeta):
+class RestErrorResponseType(JsonResponseType):
     def __init__(self):
         super().__init__('rest-error')
         self._data_type = ErrorResponseType()
@@ -169,7 +171,7 @@ class JsonSchemaResponse(SuccessResponse):
         return self._schema
 
 
-class JsonSchemaResponseMeta(JsonResponseMeta):
+class JsonSchemaResponseType(JsonResponseType):
     NAME = 'schema'
 
     def __init__(self):
@@ -195,12 +197,12 @@ class JsonSchemaEndpoint(Endpoint):
     def __init__(self):
         super().__init__(self.NAME,
                          '/about/json/schema',
-                         NonConfigurableGetRequestMeta(),
-                         JsonSchemaResponseMeta())
+                         NonConfigurableGetRequestType(),
+                         JsonSchemaResponseType())
         self._endpoints = App.current.service('http', 'endpoints')
         self._urls = App.current.service('http', 'urls')
-        self._error_response_metas = App.current.service(
-            'http', 'error_response_metas')
+        self._error_response_types = App.current.service(
+            'http', 'error_response_types')
 
     def handle(self, request):
         assert isinstance(request, NonConfigurableRequest)
@@ -215,26 +217,26 @@ class JsonSchemaEndpoint(Endpoint):
         }
 
         for endpoint in self._endpoints.get_endpoints():
-            request_meta = endpoint.request_meta
+            request_type = endpoint.request_type
             schema['definitions'].setdefault('request', {})
             schema['definitions']['request'].setdefault(
-                request_meta.name,
-                request_meta.get_json_schema() if isinstance(request_meta,
-                                                             JsonMessageMeta) else {})
+                request_type.name,
+                request_type.get_json_schema() if isinstance(request_type,
+                                                             JsonMessageType) else {})
 
-            response_meta = endpoint.response_meta
+            response_type = endpoint.response_type
             schema['definitions'].setdefault('response', {})
             schema['definitions']['response'].setdefault(
-                response_meta.name,
-                response_meta.get_json_schema() if isinstance(response_meta,
-                                                              JsonMessageMeta) else {})
+                response_type.name,
+                response_type.get_json_schema() if isinstance(response_type,
+                                                              JsonMessageType) else {})
 
-        for error_response_meta in self._error_response_metas.get_metas():
+        for error_response_type in self._error_response_types.get_types():
             schema['definitions'].setdefault('response', {})
             schema['definitions']['response'].setdefault(
-                error_response_meta.name,
-                error_response_meta.get_json_schema() if isinstance(
-                    error_response_meta, JsonMessageMeta) else {})
+                error_response_type.name,
+                error_response_type.get_json_schema() if isinstance(
+                    error_response_type, JsonMessageType) else {})
 
         return JsonSchemaResponse(schema)
 
@@ -248,7 +250,7 @@ class JsonSchemaId(IdentifiableScalarType):
         }, 'json-schema-id')
 
 
-class ExternalJsonSchemaRequestMeta(RequestMeta):
+class ExternalJsonSchemaRequestType(RequestType):
     NAME = 'external-schema'
 
     def __init__(self):
@@ -290,8 +292,8 @@ class ExternalJsonSchemaEndpoint(Endpoint):
     def __init__(self):
         super().__init__(self.NAME,
                          '/about/json/external-schema/{id}',
-                         ExternalJsonSchemaRequestMeta(),
-                         JsonSchemaResponseMeta())
+                         ExternalJsonSchemaRequestType(),
+                         JsonSchemaResponseType())
         self._urls = App.current.service('http', 'urls')
         self._schemas = App.current.service('rest', 'json_schemas')
 
@@ -319,8 +321,8 @@ class ResourcesResponse(SuccessResponse):
 
 class GetResourcesEndpoint(Endpoint):
     @staticmethod
-    def _build_response_meta_class(resource_type: ResourceType):
-        class ResourcesResponseMeta(JsonResponseMeta):
+    def _build_response_type_class(resource_type: ResourceType):
+        class ResourcesResponseType(JsonResponseType):
             _resource_type = resource_type
             _type = ListType(resource_type)
 
@@ -334,15 +336,15 @@ class GetResourcesEndpoint(Endpoint):
                 assert isinstance(response, ResourcesResponse)
                 return self._type.to_json(response.resources)
 
-        return ResourcesResponseMeta
+        return ResourcesResponseType
 
     @contract
     def __init__(self, resources: ResourceRepository):
         resource_name = resources.get_type().name
         super().__init__('%ss' % resource_name,
                          '/%ss' % resource_name,
-                         NonConfigurableGetRequestMeta(),
-                         self._build_response_meta_class(
+                         NonConfigurableGetRequestType(),
+                         self._build_response_type_class(
                              resources.get_type())())
         self._resources = resources
 
@@ -371,7 +373,7 @@ class ResourceResponse(SuccessResponse):
         return self._resource
 
 
-class ResourceRequestMeta(RequestMeta):
+class ResourceRequestType(RequestType):
     def __init__(self):
         super().__init__('resource', 'GET')
 
@@ -387,8 +389,8 @@ class ResourceRequestMeta(RequestMeta):
 
 class GetResourceEndpoint(Endpoint):
     @staticmethod
-    def _build_response_meta_class(resource_type: ResourceType):
-        class ResourceResponseMeta(JsonResponseMeta):
+    def _build_response_type_class(resource_type: ResourceType):
+        class ResourceResponseType(JsonResponseType):
             _type = resource_type
 
             def __init__(self):
@@ -401,14 +403,14 @@ class GetResourceEndpoint(Endpoint):
                 assert isinstance(response, ResourceResponse)
                 return self._type.to_json(response.resource)
 
-        return ResourceResponseMeta
+        return ResourceResponseType
 
     @contract
     def __init__(self, resources: ResourceRepository):
         resource_name = resources.get_type().name
         super().__init__(resource_name, '/%ss/{id}' % resource_name,
-                         ResourceRequestMeta(),
-                         self._build_response_meta_class(
+                         ResourceRequestType(),
+                         self._build_response_type_class(
                              resources.get_type())())
         self._resources = resources
 

@@ -8,7 +8,7 @@ from jsonschema.validators import validator_for
 
 from alfred import indent, format_iter
 from alfred_http.tests import HttpTestCase
-from alfred_rest.endpoints import JsonMessageMeta
+from alfred_rest.endpoints import JsonMessageType
 from alfred_rest.tests.extension.extension import RestTestExtension
 
 
@@ -20,19 +20,18 @@ class RestTestCase(HttpTestCase):
                 headers: Optional[Dict] = None):
         # @todo Validate request data too. But the app under test validates requests already...
         response = super().request(endpoint_name, parameters, headers)
-        if 'Content-Type' in response.headers and 'json' in response.headers[
-                'Content-Type']:
+        if 'Content-Type' in response.headers and 'json' in response.headers['Content-Type']:
             endpoint = self._app.service(
                 'http', 'endpoints').get_endpoint(endpoint_name)
-            response_metas = [endpoint.response_meta] + \
-                self._app.service('http', 'error_response_metas').get_metas()
-            response_metas = [
-                rm for rm in response_metas if isinstance(rm, JsonMessageMeta)]
-            if not response_metas:
+            response_types = [endpoint.response_type] + \
+                self._app.service('http', 'error_response_types').get_types()
+            response_types = [
+                rm for rm in response_types if isinstance(rm, JsonMessageType)]
+            if not response_types:
                 raise AssertionError(
                     'This request did not expect a JSON response.')
             requirements = []
-            for response_meta in response_metas:
+            for response_meta in response_types:
                 try:
                     schema_url = self._app.service(
                         'http', 'urls').build('schema')
@@ -50,8 +49,10 @@ class RestTestCase(HttpTestCase):
 
             requirements = set(requirements)
             response_labels = format_iter(
-                list(map(lambda x: '"%s" (%s)' % (x.name, type(x)), response_metas)))
-            message = ['The response claims to contain JSON, but it cannot be validated against the JSON responses defined for this endpoint:\n%s\nOne of the following requirements must be met:' % response_labels]
+                list(map(lambda x: '"%s" (%s)' % (x.name, type(x)),
+                         response_types)))
+            message = [
+                'The response claims to contain JSON, but it cannot be validated against the JSON responses defined for this endpoint:\n%s\nOne of the following requirements must be met:' % response_labels]
             if requirements:
                 for requirement in requirements:
                     message.append("\n".join(

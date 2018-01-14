@@ -51,7 +51,7 @@ class HttpTestCase(AppTestCase):
         endpoint = endpoints.get_endpoint(endpoint_name)
         assert isinstance(endpoint, Endpoint)
         # @todo Ensure we only pass query parameters to `requests`.
-        response = getattr(requests, endpoint.request_meta.method.lower())(url,
+        response = getattr(requests, endpoint.request_type.method.lower())(url,
                                                                            params=parameters,
                                                                            headers=headers)
 

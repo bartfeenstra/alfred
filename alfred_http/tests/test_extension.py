@@ -2,9 +2,9 @@ from unittest import TestCase
 
 from alfred.app import App, Extension
 from alfred_http.endpoints import EndpointRepository, EndpointUrlBuilder, \
-    Endpoint, StaticEndpointRepository, EmptyResponseMeta, SuccessResponse, \
+    Endpoint, StaticEndpointRepository, EmptyResponseType, SuccessResponse, \
     Request, \
-    NonConfigurableGetRequestMeta
+    NonConfigurableGetRequestType
 from alfred_http.extension import HttpExtension
 
 
@@ -12,8 +12,8 @@ class HttpExtensionTest(TestCase):
     class TestEndpoint(Endpoint):
         def __init__(self):
             super().__init__('http_test', 'http/test',
-                             NonConfigurableGetRequestMeta(),
-                             EmptyResponseMeta())
+                             NonConfigurableGetRequestType(),
+                             EmptyResponseType())
 
         def handle(self, request: Request):
             return SuccessResponse()

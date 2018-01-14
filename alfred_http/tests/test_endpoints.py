@@ -7,14 +7,14 @@ from alfred.app import Extension
 from alfred_http.endpoints import Endpoint, \
     NestedEndpointRepository, EndpointRepository, EndpointNotFound, \
     StaticEndpointRepository, EndpointFactoryRepository, \
-    NonConfigurableGetRequestMeta, EmptyResponseMeta, SuccessResponse, Request
+    NonConfigurableGetRequestType, EmptyResponseType, SuccessResponse, Request
 from alfred_http.extension import HttpExtension
 from alfred_http.tests import HttpTestCase
 
 
 class FooEndpoint(Endpoint):
     def __init__(self):
-        super().__init__('foo', '/foo', NonConfigurableGetRequestMeta(), EmptyResponseMeta())
+        super().__init__('foo', '/foo', NonConfigurableGetRequestType(), EmptyResponseType())
 
     def handle(self, request: Request):
         return SuccessResponse()
@@ -22,7 +22,7 @@ class FooEndpoint(Endpoint):
 
 class BarEndpoint(Endpoint):
     def __init__(self):
-        super().__init__('bar', '/bar', NonConfigurableGetRequestMeta(), EmptyResponseMeta())
+        super().__init__('bar', '/bar', NonConfigurableGetRequestType(), EmptyResponseType())
 
     def handle(self, request: Request):
         return SuccessResponse()
@@ -30,7 +30,7 @@ class BarEndpoint(Endpoint):
 
 class BazEndpoint(Endpoint):
     def __init__(self):
-        super().__init__('baz', '/baz', NonConfigurableGetRequestMeta(), EmptyResponseMeta())
+        super().__init__('baz', '/baz', NonConfigurableGetRequestType(), EmptyResponseType())
 
     def handle(self, request: Request):
         return SuccessResponse()
@@ -180,8 +180,8 @@ class EndpointUrlBuilderTest(HttpTestCase):
     class TestEndpoint(Endpoint):
         def __init__(self):
             super().__init__('http_test', '/http/test',
-                             NonConfigurableGetRequestMeta(),
-                             EmptyResponseMeta())
+                             NonConfigurableGetRequestType(),
+                             EmptyResponseType())
 
         def handle(self, request):
             pass
@@ -190,8 +190,8 @@ class EndpointUrlBuilderTest(HttpTestCase):
         def __init__(self):
             super().__init__('http_test_with_parameters',
                              '/http/test/{foo}',
-                             NonConfigurableGetRequestMeta(),
-                             EmptyResponseMeta())
+                             NonConfigurableGetRequestType(),
+                             EmptyResponseType())
 
         def handle(self, request):
             pass

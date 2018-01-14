@@ -6,11 +6,11 @@ from jinja2 import Template
 
 from alfred.app import App
 from alfred_http.endpoints import Endpoint, NonConfigurableRequest, \
-    NonConfigurableGetRequestMeta, SuccessResponse, \
-    ResponseMeta
+    NonConfigurableGetRequestType, SuccessResponse, \
+    ResponseType
 from alfred_http.http import HttpBody
 from alfred_openapi import RESOURCE_PATH
-from alfred_rest.endpoints import JsonMessageMeta
+from alfred_rest.endpoints import JsonMessageType
 
 
 class OpenApiResponse(SuccessResponse):
@@ -24,12 +24,12 @@ class OpenApiResponse(SuccessResponse):
         return self._spec
 
 
-class OpenApiResponseMeta(ResponseMeta, JsonMessageMeta):
+class OpenApiResponseType(ResponseType, JsonMessageType):
     def __init__(self):
         super().__init__('openapi')
         self._urls = App.current.service('http', 'urls')
 
-    @ResponseMeta._build_http_response.register()
+    @ResponseType._build_http_response.register()
     def _build_http_response_body(self, response, content_type, http_response):
         assert isinstance(response, OpenApiResponse)
         if 'application/json' == content_type:
@@ -63,8 +63,8 @@ class OpenApiEndpoint(Endpoint):
 
     def __init__(self):
         super().__init__(self.NAME, '/about/openapi',
-                         NonConfigurableGetRequestMeta(),
-                         OpenApiResponseMeta())
+                         NonConfigurableGetRequestType(),
+                         OpenApiResponseType())
         self._openapi = App.current.service('openapi', 'openapi')
 
     def handle(self, request):

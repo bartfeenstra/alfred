@@ -3,7 +3,7 @@ from contracts import contract
 from flask import request
 
 from alfred_http.endpoints import EndpointRepository, EndpointUrlBuilder
-from alfred_rest.endpoints import JsonMessageMeta
+from alfred_rest.endpoints import JsonMessageType
 
 
 class OpenApi:
@@ -31,12 +31,12 @@ class OpenApi:
 
         paths_operations = {}
         for endpoint in self._endpoints.get_endpoints():
-            method = endpoint.request_meta.method.lower()
+            method = endpoint.request_type.method.lower()
 
             operation = {
                 'operationId': endpoint.name,
-                'consumes': endpoint.request_meta.get_content_types(),
-                'produces': endpoint.response_meta.get_content_types(),
+                'consumes': endpoint.request_type.get_content_types(),
+                'produces': endpoint.response_type.get_content_types(),
                 'responses': {
                     200: {
                         'description': 'A successful response.',
@@ -51,18 +51,18 @@ class OpenApi:
                 'parameters': [],
             }
 
-            if isinstance(endpoint.request_meta, JsonMessageMeta):
+            if isinstance(endpoint.request_type, JsonMessageType):
                 operation['parameters'].append({
                     'name': 'body',
                     'description': 'The HTTP request body.',
                     'in': 'body',
                     'required': True,
                     'schema': {
-                        '$ref': '%s#/definitions/request/%s' % (self._urls.build('schema'), endpoint.request_meta.name),
+                        '$ref': '%s#/definitions/request/%s' % (self._urls.build('schema'), endpoint.request_type.name),
                     },
                 })
 
-            for parameter in endpoint.request_meta.get_parameters():
+            for parameter in endpoint.request_type.get_parameters():
                 # @todo Allow parameters' types's to be rewritten here,
                 #  once we upgrade to OpenAPI 3.0, and parameter objects
                 #  support schema references.
@@ -80,9 +80,9 @@ class OpenApi:
                 })
                 operation['parameters'].append(parameter_spec)
 
-            if isinstance(endpoint.response_meta, JsonMessageMeta):
+            if isinstance(endpoint.response_type, JsonMessageType):
                 operation['responses'][200]['schema'] = {
-                    '$ref': '%s#/definitions/response/%s' % (self._urls.build('schema'), endpoint.response_meta.name),
+                    '$ref': '%s#/definitions/response/%s' % (self._urls.build('schema'), endpoint.response_type.name),
                 }
 
             paths_operations.setdefault(endpoint.path, {})

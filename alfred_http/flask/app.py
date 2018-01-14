@@ -22,7 +22,7 @@ class EmptyFlaskHttpResponse(FlaskHttpResponse):
 @contract
 def flask_to_alfred_http_request(flask_http_request, endpoint: Endpoint, kwargs: Dict) -> HttpRequest:
     content_type = flask_http_request.accept_mimetypes.best_match(
-        endpoint.response_meta.get_content_types())
+        endpoint.response_type.get_content_types())
     request_charset = flask_http_request.mimetype_params.get(
         'charset')
     charset = request_charset if request_charset else 'utf-8'
@@ -30,7 +30,7 @@ def flask_to_alfred_http_request(flask_http_request, endpoint: Endpoint, kwargs:
         charset)
     request_body = HttpBody(request_body_data, content_type)
     request_parameters = {}
-    for request_parameter in endpoint.request_meta.get_parameters():
+    for request_parameter in endpoint.request_type.get_parameters():
         request_parameters[
             request_parameter.name] = request_parameter
     request_arguments = {}
@@ -110,7 +110,7 @@ class EndpointView(MethodView):
     @contract
     def __init__(self, app: App, endpoints: List):
         for endpoint in endpoints:
-            setattr(self, endpoint.request_meta.method.lower(),
+            setattr(self, endpoint.request_type.method.lower(),
                     self._build_view(app, endpoint))
 
     @staticmethod
@@ -120,19 +120,19 @@ class EndpointView(MethodView):
             try:
                 # Check we can produce the requested content type.
                 content_type = current_http_request.accept_mimetypes.best_match(
-                    endpoint.response_meta.get_content_types())
+                    endpoint.response_type.get_content_types())
                 if content_type is None:
                     raise NotAcceptableError()
 
                 # Check the request consumes the provided content type.
-                if current_http_request.mimetype not in endpoint.request_meta.get_content_types():
+                if current_http_request.mimetype not in endpoint.request_type.get_content_types():
                     raise UnsupportedMediaTypeError()
 
                 alfred_http_request = flask_to_alfred_http_request(
                     current_http_request, endpoint, kwargs)
 
                 # Build the API request.
-                alfred_request = endpoint.request_meta.from_http_request(
+                alfred_request = endpoint.request_type.from_http_request(
                     alfred_http_request)
                 assert isinstance(alfred_request, Request)
 
@@ -140,7 +140,7 @@ class EndpointView(MethodView):
                 alfred_response = endpoint.handle(alfred_request)
 
                 # Build the Alfred HTTP response.
-                alfred_http_response = endpoint.response_meta.to_http_response(
+                alfred_http_response = endpoint.response_type.to_http_response(
                     alfred_response,
                     content_type)
                 assert isinstance(alfred_http_response, HttpResponse)
@@ -149,26 +149,26 @@ class EndpointView(MethodView):
 
             except Error as e:
                 alfred_response = ErrorResponse().with_error(e)
-                metas = app.service('http', 'error_response_metas').get_metas()
-                metas_by_content_type = {}
-                for meta in metas:
-                    for content_type in meta.get_content_types():
-                        metas_by_content_type.setdefault(content_type, [])
-                        metas_by_content_type[content_type].append(meta)
-                empty_metas = metas_by_content_type['']
-                del metas_by_content_type['']
+                types = app.service('http', 'error_response_types').get_types()
+                types_by_content_type = {}
+                for type in types:
+                    for content_type in type.get_content_types():
+                        types_by_content_type.setdefault(content_type, [])
+                        types_by_content_type[content_type].append(type)
+                empty_types = types_by_content_type['']
+                del types_by_content_type['']
 
                 # Check we can produce the requested content type.
                 content_type = current_http_request.accept_mimetypes.best_match(
-                    metas_by_content_type.keys())
+                    types_by_content_type.keys())
                 # Fall back to not including any content at all.
                 if content_type is None:
                     content_type = ''
-                    meta = empty_metas[0]
+                    type = empty_types[0]
                 else:
-                    meta = metas_by_content_type[content_type][0]
+                    type = types_by_content_type[content_type][0]
 
-                alfred_http_response = meta.to_http_response(
+                alfred_http_response = type.to_http_response(
                     alfred_response, content_type)
 
                 return alfred_to_flask_http_response(alfred_http_response)
