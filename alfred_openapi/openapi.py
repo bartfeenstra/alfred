@@ -3,7 +3,7 @@ from contracts import contract
 from flask import request
 
 from alfred_http.endpoints import EndpointRepository, EndpointUrlBuilder
-from alfred_rest.endpoints import JsonMessageMeta, RestRequestMeta
+from alfred_rest.endpoints import JsonMessageMeta
 
 
 class OpenApi:
@@ -62,24 +62,23 @@ class OpenApi:
                     },
                 })
 
-            if isinstance(endpoint.request_meta, RestRequestMeta):
-                for parameter in endpoint.request_meta.get_parameters():
-                    # @todo Allow parameters' types's to be rewritten here,
-                    #  once we upgrade to OpenAPI 3.0, and parameter objects
-                    #  support schema references.
-                    parameter_spec = parameter.type
-                    # Do our best to make the JSON Schema Swagger compliant.
-                    if 'title' in parameter_spec:
-                        if 'description' not in parameter_spec:
-                            parameter_spec['description'] = parameter_spec['title']
-                        del parameter_spec['title']
-                    # Set required properties.
-                    parameter_spec.update({
-                        'name': parameter.name,
-                        'in': 'path' if parameter.required else 'query',
-                        'required': parameter.required,
-                    })
-                    operation['parameters'].append(parameter_spec)
+            for parameter in endpoint.request_meta.get_parameters():
+                # @todo Allow parameters' types's to be rewritten here,
+                #  once we upgrade to OpenAPI 3.0, and parameter objects
+                #  support schema references.
+                parameter_spec = parameter.type
+                # Do our best to make the JSON Schema Swagger compliant.
+                if 'title' in parameter_spec:
+                    if 'description' not in parameter_spec:
+                        parameter_spec['description'] = parameter_spec['title']
+                    del parameter_spec['title']
+                # Set required properties.
+                parameter_spec.update({
+                    'name': parameter.name,
+                    'in': 'path' if parameter.required else 'query',
+                    'required': parameter.required,
+                })
+                operation['parameters'].append(parameter_spec)
 
             if isinstance(endpoint.response_meta, JsonMessageMeta):
                 operation['responses'][200]['schema'] = {

@@ -5,12 +5,15 @@ from typing import Callable
 
 from contracts import contract
 
+from alfred import qualname
+
 
 class HandlerDefinition:
     @contract
-    def __init__(self, handler: Callable, factory: bool = False):
+    def __init__(self, handler: Callable, factory: bool = False, weight: int=0):
         self._handler = handler
         self._factory = factory
+        self._weight = weight
 
     @property
     @contract
@@ -21,6 +24,11 @@ class HandlerDefinition:
     @contract
     def factory(self) -> bool:
         return self._factory
+
+    @property
+    @contract
+    def weight(self) -> int:
+        return self._weight
 
 
 class Dispatcher:
@@ -53,17 +61,20 @@ class Dispatcher:
         return self
 
     def __call__(self, *args, **kwargs):
-        handlers = self._handler_definitions
+        handler_definitions = self._handler_definitions
 
         # Keep those handlers that are on the same instance or class.
         if self._bound_cls:
-            handlers = filter(
+            handler_definitions = filter(
                 lambda x: hasattr(self._bound_cls, x.handler.__name__) and (
                     x.handler == getattr(self._bound_cls,
-                                         x.handler.__name__)), handlers)
+                                         x.handler.__name__)), handler_definitions)
 
-        # Prepare the handlers.
-        handlers = map(self._get_handler, handlers)
+        handler_definitions = sorted(
+            handler_definitions, key=lambda x: x.weight)
+
+        # Load the handlers.
+        handlers = map(self._get_handler, handler_definitions)
 
         # Now all third-party handlers have been processed, prepend the
         #  originally dispatched method, so it's invoked first.
@@ -91,7 +102,8 @@ class Dispatcher:
 
     def _get_factory(self):
         if not self._factory:
-            raise RuntimeError('No factory exists for this dispatcher.')
+            raise RuntimeError(
+                'No factory exists for this dispatcher (%s).' % qualname(self))
         return self._bind(self._factory)
 
     def _get_dispatched(self):

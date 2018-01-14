@@ -26,7 +26,8 @@ class RestTestCase(HttpTestCase):
                 'http', 'endpoints').get_endpoint(endpoint_name)
             response_metas = [endpoint.response_meta] + \
                 self._app.service('http', 'error_response_metas').get_metas()
-            response_metas = [rm for rm in response_metas if isinstance(rm, JsonMessageMeta)]
+            response_metas = [
+                rm for rm in response_metas if isinstance(rm, JsonMessageMeta)]
             if not response_metas:
                 raise AssertionError(
                     'This request did not expect a JSON response.')

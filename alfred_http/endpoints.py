@@ -3,11 +3,11 @@ from copy import copy
 from typing import Iterable, Optional, Dict
 
 from contracts import contract, ContractsMeta, with_metaclass
-from flask import Request as HttpRequest, url_for
-from flask import Response as HttpResponse
-
+from flask import url_for
 from alfred import format_iter
-from alfred.app import Factory
+from alfred.app import App
+from alfred.dispatch import dispatch
+from alfred_http.http import HttpRequest, HttpResponse, HttpResponseBuilder
 
 
 class Error(Exception):
@@ -103,15 +103,13 @@ class RequestMeta(MessageMeta):
 
     @abc.abstractmethod
     @contract
-    def from_http_request(self, http_request: HttpRequest,
-                          path_parameters: Dict) -> Request:
+    def from_http_request(self, http_request: HttpRequest) -> Request:
         """
         Converts an HTTP request to an API request.
 
         The HTTP request SHOULD be valid for this request. If it is not,
         exceptions may be raised.
         :param http_request:
-        :param path_parameters:
         :return:
         """
         pass
@@ -119,6 +117,34 @@ class RequestMeta(MessageMeta):
     @property
     def method(self) -> str:
         return self._method
+
+    @dispatch()
+    def validate_http_request(self, http_request: HttpRequest):
+        """
+        Validates an incoming HTTP request.
+        :param http_request:
+        :return:
+        """
+        pass
+
+    @validate_http_request.register()
+    @contract
+    def _validate_http_request_arguments(self, http_request: HttpRequest):
+        validator = App.current.service('rest', 'json_validator')
+        for parameter in self.get_parameters():
+            name = parameter.name
+            if parameter.required and name not in http_request.arguments:
+                raise RuntimeError('Request type "%s" (%s) requires URL path parameter "%s". Make sure the endpoint defines this parameter in its path.' % (
+                    self.name, type(self), name))
+            validator.validate(
+                http_request.arguments[name], parameter.type)
+
+    @contract
+    def get_parameters(self) -> Iterable:
+        """
+        :return: Iterable[RequestParameter]
+        """
+        return ()
 
 
 class NonConfigurableRequest(Request):
@@ -134,7 +160,7 @@ class NonConfigurableRequestMeta(RequestMeta):
     def __init__(self, method: str):
         super().__init__('non-configurable-%s' % method.lower(), method)
 
-    def from_http_request(self, http_request, path_parameters):
+    def from_http_request(self, http_request):
         return NonConfigurableRequest()
 
     def get_content_types(self):
@@ -164,20 +190,33 @@ class ResponseMeta(MessageMeta):
         :return:
         """
         assert content_type in self.get_content_types()
-        http_response = HttpResponse()
-        http_response.status = str(response.http_response_status_code)
-        http_response.headers.set('Content-Type', content_type)
-        return http_response
+        http_response = HttpResponseBuilder()
+        self._build_http_response(response, content_type, http_response)
+        return http_response.to_response()
+
+    @dispatch()
+    @contract
+    def _build_http_response(self, response: Response,
+                             content_type: str, http_response: HttpResponseBuilder):
+        """
+        Builds an HTTP response from an API response.
+
+        Decorate your own class methods with @_build_http_response.register()
+        to have them executed along with this method.
+        """
+        pass
+
+    @_build_http_response.register()
+    @contract
+    def _build_http_response_status(self, response: Response,
+                                    content_type: str, http_response: HttpResponseBuilder):
+        http_response.status = response.http_response_status_code
 
 
 class SuccessResponse(Response):
     @property
     def http_response_status_code(self):
         return 200
-
-
-class SuccessResponseMeta(ResponseMeta):
-    pass
 
 
 class ErrorResponse(Response):
@@ -226,35 +265,33 @@ class ErrorResponseMetaRepository(with_metaclass(ContractsMeta)):
 
 class Endpoint(with_metaclass(ContractsMeta)):
     @contract
-    def __init__(self, factory: Factory, name: str, path: str,
-                 request_meta_class: type,
-                 response_meta_class: type):
-        assert issubclass(request_meta_class, RequestMeta)
-        assert issubclass(response_meta_class, ResponseMeta)
+    def __init__(self, name: str, path: str,
+                 request_meta: RequestMeta,
+                 response_meta: ResponseMeta):
         self._name = name
         self._path = path
-        self._request_meta = factory.defer(request_meta_class)
-        self._response_meta = factory.defer(response_meta_class)
+        self._request_meta = request_meta
+        self._response_meta = response_meta
 
     @property
+    @contract
     def name(self) -> str:
         return self._name
 
     @property
+    @contract
     def path(self) -> str:
         return self._path
 
     @property
     @contract
     def request_meta(self) -> RequestMeta:
-        # @todo Find out why LazyValue.__get__() does not work here.
-        return self._request_meta.value
+        return self._request_meta
 
     @property
     @contract
     def response_meta(self) -> ResponseMeta:
-        # @todo Find out why LazyValue.__get__() does not work here.
-        return self._response_meta.value
+        return self._response_meta
 
     @abc.abstractmethod
     @contract
@@ -338,9 +375,8 @@ class StaticEndpointRepository(EndpointRepository):
 
 class EndpointFactoryRepository(EndpointRepository):
     @contract
-    def __init__(self, factory: Factory, endpoint_classes: Iterable):
+    def __init__(self, endpoint_classes: Iterable):
         super().__init__()
-        self._factory = factory
         self._endpoint_classes = endpoint_classes
         self._endpoints = None
 
@@ -361,9 +397,7 @@ class EndpointFactoryRepository(EndpointRepository):
     def _aggregate_endpoints(self):
         self._endpoints = []
         for endpoint_class in self._endpoint_classes:
-            endpoint = self._factory.new(endpoint_class)
-            assert isinstance(endpoint, Endpoint)
-            self._endpoints.append(endpoint)
+            self._endpoints.append(endpoint_class())
 
 
 class NestedEndpointRepository(EndpointRepository):

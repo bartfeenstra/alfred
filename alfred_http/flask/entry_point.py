@@ -5,6 +5,7 @@ from alfred.app import App
 from alfred_http.extension import HttpExtension
 
 alfred = App()
+alfred.start()
 alfred.add_extension(HttpExtension)
 for qualname in sys.argv[1:]:
     module_name, class_name = qualname.rsplit('.', 1)

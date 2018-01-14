@@ -4,11 +4,11 @@ from apispec import APISpec
 from contracts import contract
 from jinja2 import Template
 
-from alfred.app import Factory
-from alfred.extension import AppAwareFactory
+from alfred.app import App
 from alfred_http.endpoints import Endpoint, NonConfigurableRequest, \
-    NonConfigurableGetRequestMeta, SuccessResponseMeta, SuccessResponse, \
-    EndpointUrlBuilder
+    NonConfigurableGetRequestMeta, SuccessResponse, \
+    ResponseMeta
+from alfred_http.http import HttpBody
 from alfred_openapi import RESOURCE_PATH
 from alfred_rest.endpoints import JsonMessageMeta
 
@@ -24,35 +24,29 @@ class OpenApiResponse(SuccessResponse):
         return self._spec
 
 
-class OpenApiResponseMeta(SuccessResponseMeta, JsonMessageMeta, AppAwareFactory):
-    @contract
-    def __init__(self, urls: EndpointUrlBuilder):
+class OpenApiResponseMeta(ResponseMeta, JsonMessageMeta):
+    def __init__(self):
         super().__init__('openapi')
-        self._urls = urls
+        self._urls = App.current.service('http', 'urls')
 
-    @classmethod
-    def from_app(cls, app):
-        return cls(app.service('http', 'urls'))
-
-    def to_http_response(self, response, content_type):
+    @ResponseMeta._build_http_response.register()
+    def _build_http_response_body(self, response, content_type, http_response):
         assert isinstance(response, OpenApiResponse)
-        http_response = super().to_http_response(response, content_type)
-        http_response.status = '200'
         if 'application/json' == content_type:
-            return self._to_json(http_response, response)
+            builder = self._to_json
         if 'text/html' == content_type:
-            return self._to_html(http_response, response)
+            builder = self._to_html
+        http_response.body = HttpBody(builder(http_response, response),
+                                      content_type)
 
     def _to_html(self, http_response, response):
         template = Template(
             open(RESOURCE_PATH + '/templates/redoc.html.j2').read())
         spec_url = self._urls.build('openapi')
-        http_response.set_data(template.render(spec_url=spec_url))
-        return http_response
+        return template.render(spec_url=spec_url)
 
     def _to_json(self, http_response, response):
-        http_response.set_data(json.dumps(response.spec.to_dict()))
-        return http_response
+        return json.dumps(response.spec.to_dict())
 
     def get_content_types(self):
         return super().get_content_types() + ['text/html']
@@ -64,18 +58,14 @@ class OpenApiResponseMeta(SuccessResponseMeta, JsonMessageMeta, AppAwareFactory)
         }
 
 
-class OpenApiEndpoint(Endpoint, AppAwareFactory):
+class OpenApiEndpoint(Endpoint):
     NAME = 'openapi'
 
-    @contract
-    def __init__(self, factory: Factory, openapi):
-        super().__init__(factory, self.NAME, '/about/openapi',
-                         NonConfigurableGetRequestMeta, OpenApiResponseMeta)
-        self._openapi = openapi
-
-    @classmethod
-    def from_app(cls, app):
-        return cls(app.factory, app.service('openapi', 'openapi'))
+    def __init__(self):
+        super().__init__(self.NAME, '/about/openapi',
+                         NonConfigurableGetRequestMeta(),
+                         OpenApiResponseMeta())
+        self._openapi = App.current.service('openapi', 'openapi')
 
     def handle(self, request):
         assert isinstance(request, NonConfigurableRequest)

@@ -243,7 +243,7 @@ class Validator:
 
     @contract
     def validate(self, subject, schema: Dict):
-        schema = self._rewriter.rewrite(schema)
+        # schema = self._rewriter.rewrite(schema)
         validate(subject, schema)
 
 

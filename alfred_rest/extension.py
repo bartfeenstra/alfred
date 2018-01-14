@@ -1,5 +1,4 @@
-from alfred.app import Extension
-from alfred.extension import CoreExtension
+from alfred.app import Extension, App
 from alfred_http.endpoints import EndpointFactoryRepository
 from alfred_http.extension import HttpExtension
 from alfred_rest import json_schema
@@ -18,16 +17,17 @@ class RestExtension(Extension):
 
     @staticmethod
     def dependencies():
-        return [HttpExtension, CoreExtension]
+        return [HttpExtension]
 
     @Extension.service()
     def _json_validator(self) -> Validator:
-        return Validator(self._app.service('rest', 'json_schema_rewriter'))
+        return Validator(App.current.service('rest', 'external_reference_proxy'))
 
     @Extension.service()
     def _json_schema_rewriter(self):
         rewriter = NestedRewriter()
-        for tagged_rewriter in self._app.services(tag='json_schema_rewriter'):
+        for tagged_rewriter in App.current.services(
+                tag='json_schema_rewriter'):
             rewriter.add_rewriter(tagged_rewriter)
         return rewriter
 
@@ -37,13 +37,13 @@ class RestExtension(Extension):
 
     @Extension.service(tags=('json_schema_rewriter',))
     def _external_reference_proxy(self):
-        return ExternalReferenceProxy(self._app.service('http', 'base_url'),
-                                      self._app.service('http', 'urls'))
+        return ExternalReferenceProxy(App.current.service('http', 'base_url'),
+                                      App.current.service('http', 'urls'))
 
     @Extension.service()
     def _json_schemas(self):
         schemas = SchemaRepository()
-        for tagged_schema in self._app.services(tag='json_schema'):
+        for tagged_schema in App.current.services(tag='json_schema'):
             schemas.add_schema(tagged_schema)
         return schemas
 
@@ -53,22 +53,23 @@ class RestExtension(Extension):
 
     @Extension.service(tags=('http_endpoints',))
     def _endpoints(self):
-        return EndpointFactoryRepository(self._app.factory, [
+        return EndpointFactoryRepository([
             JsonSchemaEndpoint,
             ExternalJsonSchemaEndpoint,
         ])
 
     @Extension.service(tags=('http_endpoints',))
     def _resource_endpoints(self):
-        return ResourceEndpointRepository(self._app.service('rest', 'resources').values(), self._app.factory)
+        return ResourceEndpointRepository(
+            App.current.service('rest', 'resources').values())
 
     @Extension.service(tags=('error_response_meta',))
     def _rest_error_response_meta(self):
-        return RestErrorResponseMeta(self._app.service('http', 'urls'))
+        return RestErrorResponseMeta()
 
     @Extension.service()
     def _resources(self):
         resources = {}
-        for tagged_resources in self._app.services(tag='resources'):
+        for tagged_resources in App.current.services(tag='resources'):
             resources[tagged_resources.get_type().name] = tagged_resources
         return resources
