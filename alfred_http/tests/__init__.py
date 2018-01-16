@@ -1,3 +1,8 @@
+import os
+import subprocess
+from _signal import SIGINT
+from os.path import dirname
+from subprocess import Popen
 from typing import Optional, Dict
 
 import requests
@@ -5,6 +10,7 @@ from contracts import contract
 from flask import Response as HttpResponse
 
 from alfred import indent, format_iter
+from alfred import qualname
 from alfred.tests import expand_data, AppTestCase
 from alfred_http.endpoints import Endpoint
 from alfred_http.extension import HttpExtension
@@ -31,9 +37,22 @@ def provide_5xx_codes():
 class HttpTestCase(AppTestCase):
     def setUp(self):
         super().setUp()
+        extensions = self.get_extension_classes()
         self._flask_app = self._app.service('http', 'flask')
         self._flask_app_context = self._flask_app.app_context()
         self._flask_app_context.push()
+
+        # Set up the app under test.
+        uwsgi = ['uwsgi', '--http-socket', '0.0.0.0:5000', '-p', '2',
+                 '--manage-script-name', '--master', '--no-orphans', '--mount',
+                 '/=alfred_http.flask.entry_point:app']
+        if extensions:
+            uwsgi.append('--pyargv')
+            uwsgi.append('%s' % ' '.join(map(qualname, extensions)))
+        working_directory = dirname(
+            dirname(dirname(os.path.realpath(__file__))))
+        self._uwsgi = Popen(uwsgi, cwd=working_directory,
+                            stdout=subprocess.DEVNULL)
 
     def get_extension_classes(self):
         return super().get_extension_classes() + [HttpExtension]
@@ -41,6 +60,8 @@ class HttpTestCase(AppTestCase):
     def tearDown(self):
         super().tearDown()
         self._flask_app_context.pop()
+        self._uwsgi.send_signal(SIGINT)
+        self._uwsgi.wait()
 
     def request(self, endpoint_name: str,
                 parameters: Optional[Dict] = None,
