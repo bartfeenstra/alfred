@@ -75,6 +75,8 @@ class GetResourceEndpointTest(RestTestCase):
         })
         self.assertResponseStatus(404, response)
 
+
+class GetResourcesEndpointTest(RestTestCase):
     def testEndpointShouldReturnResources(self):
         expected_ids = ['foo', 'Bar']
         response = self.request('rest-tests')
