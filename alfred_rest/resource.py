@@ -3,8 +3,8 @@ from typing import Iterable, Optional, Dict
 from contracts import contract, ContractsMeta, with_metaclass
 
 from alfred import format_iter
-from alfred_rest.json import DataType, IdentifiableDataType, \
-    IdentifiableScalarType
+from alfred_json.type import IdentifiableDataType, IdentifiableScalarType, \
+    OutputDataType
 
 
 class ResourceIdType(IdentifiableScalarType):
@@ -54,7 +54,7 @@ class ResourceRepository(with_metaclass(ContractsMeta)):
 
 class ExpandableResourceRepository(ResourceRepository):
     @contract
-    def get_add_type(self) -> DataType:
+    def get_add_type(self) -> OutputDataType:
         pass
 
     @contract
@@ -70,7 +70,7 @@ class ShrinkableResourceRepository(ResourceRepository):
 
 class UpdateableResourceRepository(ResourceRepository):
     @contract
-    def get_update_type(self) -> DataType:
+    def get_update_type(self) -> OutputDataType:
         pass
 
     @contract

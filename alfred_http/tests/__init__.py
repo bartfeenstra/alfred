@@ -1,13 +1,17 @@
+import os
+import subprocess
+from _signal import SIGINT
+from os.path import dirname
+from subprocess import Popen
 from typing import Optional, Dict
-from unittest import TestCase
 
 import requests
 from contracts import contract
 from flask import Response as HttpResponse
 
 from alfred import indent, format_iter
-from alfred.app import App
-from alfred.tests import expand_data
+from alfred import qualname
+from alfred.tests import expand_data, AppTestCase
 from alfred_http.endpoints import Endpoint
 from alfred_http.extension import HttpExtension
 
@@ -30,20 +34,34 @@ def provide_5xx_codes():
     return expand_data(list(range(500, 508)) + [510, 511])
 
 
-class HttpTestCase(TestCase):
+class HttpTestCase(AppTestCase):
     def setUp(self):
-        self._app = App()
-        for extension in self.get_extension_classes():
-            self._app.add_extension(extension)
+        super().setUp()
+        extensions = self.get_extension_classes()
         self._flask_app = self._app.service('http', 'flask')
         self._flask_app_context = self._flask_app.app_context()
         self._flask_app_context.push()
 
+        # Set up the app under test.
+        uwsgi = ['uwsgi', '--http-socket', '0.0.0.0:5000', '-p', '2',
+                 '--manage-script-name', '--master', '--no-orphans', '--mount',
+                 '/=alfred_http.flask.entry_point:app']
+        if extensions:
+            uwsgi.append('--pyargv')
+            uwsgi.append('%s' % ' '.join(map(qualname, extensions)))
+        working_directory = dirname(
+            dirname(dirname(os.path.realpath(__file__))))
+        self._uwsgi = Popen(uwsgi, cwd=working_directory,
+                            stdout=subprocess.DEVNULL)
+
     def get_extension_classes(self):
-        return [HttpExtension]
+        return super().get_extension_classes() + [HttpExtension]
 
     def tearDown(self):
+        super().tearDown()
         self._flask_app_context.pop()
+        self._uwsgi.send_signal(SIGINT)
+        self._uwsgi.wait()
 
     def request(self, endpoint_name: str,
                 parameters: Optional[Dict] = None,
@@ -54,7 +72,7 @@ class HttpTestCase(TestCase):
         endpoint = endpoints.get_endpoint(endpoint_name)
         assert isinstance(endpoint, Endpoint)
         # @todo Ensure we only pass query parameters to `requests`.
-        response = getattr(requests, endpoint.request_meta.method.lower())(url,
+        response = getattr(requests, endpoint.request_type.method.lower())(url,
                                                                            params=parameters,
                                                                            headers=headers)
 
@@ -81,7 +99,7 @@ class HttpTestCase(TestCase):
         ):
             empty = 'a non-empty' if len(response.text) > 0 else 'an empty'
             raise AssertionError(
-                '%s returned %s "%s" HTTP %d response, but it must either respond with an empty HTTP 4xx or 5xx response, or one of the following content types:\n%s.' % (
+                '%s returned %s "%s" HTTP %d response, but it must either respond with an empty HTTP 4xx or 5xx response (empty body, and Content-Type and Content-Length headers), or one of the following content types:\n%s.' % (
                     url, empty, response.headers['Content-Type'],
                     response.status_code,
                     indent(format_iter(accepted_content_types))))

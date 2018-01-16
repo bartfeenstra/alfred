@@ -1,4 +1,7 @@
 from functools import wraps
+from unittest import TestCase
+
+from alfred.app import App
 
 
 def data_provider(data_provider):
@@ -56,3 +59,18 @@ def expand_data(values):
     for value in values:
         data[value] = (value,)
     return data
+
+
+class AppTestCase(TestCase):
+    def setUp(self):
+        self.addCleanup(self._stopApp)
+        self._app = App()
+        for extension in self.get_extension_classes():
+            self._app.add_extension(extension)
+        self._app.start()
+
+    def _stopApp(self):
+        self._app.stop()
+
+    def get_extension_classes(self):
+        return []

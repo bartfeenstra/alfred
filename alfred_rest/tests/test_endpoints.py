@@ -1,6 +1,7 @@
 from jsonschema import validate
 
-from alfred_rest import base64_encodes, json_schema
+from alfred_http import base64_encodes
+from alfred_json import json_schema
 from alfred_rest.tests import RestTestCase
 
 
@@ -41,7 +42,7 @@ class ExternalJsonSchemaEndpointTest(RestTestCase):
         self.assertResponseContentType(content_type, response)
         actual_schema = response.json()
         expected_schema = self._app.service(
-            'rest', 'json_schema_rewriter').rewrite(json_schema())
+            'json', 'schema_rewriter').rewrite(json_schema())
         self.assertEquals(actual_schema, expected_schema)
 
     def testEndpointShouldHandleMissingSchema(self):
@@ -74,6 +75,8 @@ class GetResourceEndpointTest(RestTestCase):
         })
         self.assertResponseStatus(404, response)
 
+
+class GetResourcesEndpointTest(RestTestCase):
     def testEndpointShouldReturnResources(self):
         expected_ids = ['foo', 'Bar']
         response = self.request('rest-tests')
@@ -82,4 +85,4 @@ class GetResourceEndpointTest(RestTestCase):
         actual_ids = []
         for resource_data in data:
             actual_ids.append(resource_data['id'])
-        self.assertEqual(actual_ids, expected_ids)
+        self.assertCountEqual(actual_ids, expected_ids)
