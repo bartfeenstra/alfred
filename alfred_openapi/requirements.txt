@@ -1,3 +1,0 @@
-apispec ~= 0.27.0
-jinja2 ~= 2.10
-pycontracts ~= 1.8.0

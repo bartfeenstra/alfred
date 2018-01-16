@@ -1,8 +1,8 @@
--r ./requirements.txt
--r ./alfred/requirements-dev.txt
--r ./alfred_http/requirements-dev.txt
--r ./alfred_json/requirements-dev.txt
--r ./alfred_manor/requirements-dev.txt
--r ./alfred_openapi/requirements-dev.txt
--r ./alfred_rest/requirements-dev.txt
+autopep8 ~= 1.3
+coverage ~= 4.4.1
 coveralls ~= 1.2.0
+flake8 ~= 3.3.0
+nose2 ~= 0.6.5
+requests ~= 2.18.4
+requests-mock ~= 1.3.0
+uwsgi ~= 2.0.15

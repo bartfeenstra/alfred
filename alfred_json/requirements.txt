@@ -1,2 +1,0 @@
-jsonschema ~= 2.6
-pycontracts ~= 1.8.0
