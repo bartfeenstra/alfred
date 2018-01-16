@@ -1,105 +1,63 @@
-import abc
 import json
 from typing import Dict, Iterable
 
 from contracts import contract
-from flask import Request as HttpRequest
 
-from alfred.app import Factory
-from alfred.extension import AppAwareFactory
-from alfred_http.endpoints import Endpoint, EndpointUrlBuilder, \
-    EndpointRepository, \
-    MessageMeta, \
-    Response, SuccessResponse, SuccessResponseMeta, \
-    NonConfigurableGetRequestMeta, NonConfigurableRequest, RequestMeta, \
-    Request, ErrorResponse, NotFoundError, ErrorResponseMetaRepository
-from alfred_rest import base64_decodes
-from alfred_rest.json import Rewriter, IdentifiableDataType, ListType, \
-    SchemaRepository, SchemaNotFound, Validator, InputDataType, \
-    IdentifiableScalarType
+from alfred.app import App
+from alfred_http import base64_decodes
+from alfred_http.endpoints import Endpoint, EndpointRepository, \
+    SuccessResponse, NonConfigurableGetRequestType, \
+    NonConfigurableRequest, RequestType, Request, ErrorResponse, NotFoundError, \
+    ResponseType, PayloadType, RequestPayloadType, ResponsePayloadType, \
+    RequestParameter, ErrorResponseType
+from alfred_http.http import HttpRequest, HttpResponseBuilder, HttpBody
+from alfred_json.schema import SchemaNotFound
+from alfred_json.type import IdentifiableDataType, ListType, \
+    IdentifiableScalarType, InputDataType, OutputDataType, OutputProcessorType
 from alfred_rest.resource import ResourceRepository, ResourceType, \
     ResourceIdType, ResourceNotFound
 
 
-class RequestParameter:
+class JsonPayloadType(PayloadType):
+    def get_content_types(self):
+        return ['application/json']
+
+
+class JsonRequestPayloadType(JsonPayloadType, RequestPayloadType):
     @contract
-    def __init__(self, data_type: IdentifiableScalarType, name=None, required=True,
-                 cardinality=1):
-        assert isinstance(data_type, InputDataType)
-        self.assert_valid_type(data_type)
-        self._type = data_type
-        # Required parameters appear in paths, and we do not support multiple
-        #  values there.
-        if required:
-            assert 1 == cardinality
-        self._required = required
-        self._cardinality = cardinality
-        self._name = name
+    def __init__(self, data_type: InputDataType):
+        self._data_type = data_type
+        self._validator = App.current.service('json', 'validator')
 
     @property
     @contract
-    def name(self) -> str:
-        return self._name if self._name is not None else self.type.name
+    def data_type(self) -> InputDataType:
+        return self._data_type
 
-    @property
-    @contract
-    def required(self) -> bool:
-        return self._required
-
-    @property
-    @contract
-    def cardinality(self) -> int:
-        return self._cardinality
-
-    @property
-    @contract
-    def type(self) -> IdentifiableScalarType:
-        return self._type
-
-    @staticmethod
-    @contract
-    def assert_valid_type(schema: Dict):
-        if 'enum' in schema:
-            for value in schema['enum']:
-                assert isinstance(value,
-                                  (str, int, float, bool)) or value is None
-        elif 'type' in schema:
-            assert schema['type'] in ('string', 'number', 'boolean')
-
-
-class RestRequestMeta(RequestMeta):
-    def __init__(self, validator: Validator, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._validator = validator
-
-    @contract
-    def get_parameters(self) -> Iterable:
-        """
-        :return: Iterable[RequestParameter]
-        """
-        return ()
-
-    def from_http_request(self, http_request: HttpRequest,
-                          path_parameters: Dict):
-        arguments = {}
-        for parameter in self.get_parameters():
-            name = parameter.name
-            if parameter.required:
-                try:
-                    value = path_parameters[name]
-                except KeyError:
-                    raise RuntimeError('Request type "%s" (%s) requires URL path parameter "%s", which is not defined for %s.' % (
-                        self.name, type(self), name, http_request.full_path))
-            else:
-                value = http_request.args.get(name)
-            self._validator.validate(value, parameter.type)
-            arguments[name] = parameter.type.from_json(value)
-
-        return self._from_rest_request(http_request, arguments)
-
-    @abc.abstractmethod
-    def _from_rest_request(self, http_request: HttpRequest, arguments: Dict):
+    def from_http_request(self, http_request):
+        # return self._data_type.from_json()
+        # self._validator.validate(json_data, self.data_type.get_json_schema())
+        # @todo Can we use InputProcessorType to simply turn any data structure into a response object quickly?
+        # @todo
+        # @todo
         pass
+
+
+class JsonResponsePayloadType(JsonPayloadType, ResponsePayloadType):
+    @contract
+    def __init__(self, data_type: OutputDataType):
+        self._data_type = data_type
+
+    @property
+    @contract
+    def data_type(self) -> OutputDataType:
+        return self._data_type
+
+    def to_http_response(self, response, content_type):
+        json_data = self._data_type.to_json(response)
+        http_response = HttpResponseBuilder()
+        http_response.body = HttpBody(json.dumps(json_data), content_type)
+        return http_response
 
 
 class ErrorType(IdentifiableDataType):
@@ -113,7 +71,11 @@ class ErrorType(IdentifiableDataType):
                     'type': 'string',
                 },
                 'title': {
-                    'title': 'The human-readable error title.',
+                    'title': 'The human-readable, generic title of this type of error.',
+                    'type': 'string',
+                },
+                'description': {
+                    'title': 'The human-readable description of this particular occurrence of the error.',
                     'type': 'string',
                 },
             },
@@ -127,69 +89,49 @@ class ErrorType(IdentifiableDataType):
         }
 
 
-class ErrorResponseType(IdentifiableDataType):
-    def __init__(self):
-        self._data_type = ListType(ErrorType())
-        super().__init__({
-            'title': 'Error response',
-            'type': 'object',
-            'properties': {
-                'errors': self._data_type,
-            },
-            'required': ['errors'],
-        }, 'error', 'response')
+class ErrorPayloadType(JsonResponsePayloadType):
+    class ErrorResponseType(IdentifiableDataType):
+        def __init__(self):
+            self._data_type = ListType(ErrorType())
+            super().__init__({
+                'title': 'Error response',
+                'type': 'object',
+                'properties': {
+                    'errors': self._data_type,
+                },
+                'required': ['errors'],
+            }, 'error')
 
-    def to_json(self, data):
-        assert isinstance(data, ErrorResponse)
+        def to_json(self, data):
+            assert isinstance(data, ErrorResponse)
+            return {
+                'errors': self._data_type.to_json(data.errors),
+            }
+
+    def __init__(self):
+        super().__init__(self.ErrorResponseType())
+
+
+class JsonSchemaType(InputDataType, OutputDataType):
+    def get_json_schema(self):
         return {
-            'errors': self._data_type.to_json(data.errors),
+            '$ref': 'http://json-schema.org/draft-04/schema#',
         }
 
+    def from_json(self, json_data):
+        assert isinstance(json_data, Dict)
+        return json_data
 
-class JsonMessageMeta(MessageMeta):
+    def to_json(self, data):
+        assert isinstance(data, Dict)
+        rewriter = App.current.service('json', 'schema_rewriter')
+        data = rewriter.rewrite(data)
+        return data
+
+
+class JsonSchemaResponsePayloadType(JsonResponsePayloadType):
     def get_content_types(self):
-        return ['application/json']
-
-    @abc.abstractmethod
-    @contract
-    def get_json_schema(self) -> Dict:
-        pass
-
-
-class JsonResponseMeta(SuccessResponseMeta, JsonMessageMeta):
-    @contract
-    def __init__(self, name: str, urls: EndpointUrlBuilder):
-        super().__init__(name)
-        self._urls = urls
-
-    def to_http_response(self, response, content_type):
-        http_response = super().to_http_response(response, content_type)
-        # @todo Validate the JSON. But we can only do that once all children are done with this method....
-        # @todo How do we do that?
-        # @todo Maybe only when debug=True, though.
-        # @todo Can this be moved to the parent class so we validate requests as well?
-        data = self.to_json(response, content_type)
-        http_response.set_data(json.dumps(data))
-
-        return http_response
-
-    @abc.abstractmethod
-    @contract
-    def to_json(self, response: Response, content_type: str):
-        pass
-
-
-class RestErrorResponseMeta(JsonResponseMeta):
-    @contract
-    def __init__(self, urls: EndpointUrlBuilder):
-        super().__init__('rest-error', urls)
-        self._data_type = ErrorResponseType()
-
-    def to_json(self, response, content_type):
-        return self._data_type.to_json(response)
-
-    def get_json_schema(self):
-        return self._data_type
+        return ['application/schema+json']
 
 
 class JsonSchemaResponse(SuccessResponse):
@@ -204,52 +146,20 @@ class JsonSchemaResponse(SuccessResponse):
         return self._schema
 
 
-class JsonSchemaResponseMeta(JsonResponseMeta, AppAwareFactory):
-    NAME = 'schema'
-
-    @contract
-    def __init__(self, urls: EndpointUrlBuilder, rewriter: Rewriter):
-        super().__init__(self.NAME, urls)
-        self._rewriter = rewriter
-
-    @classmethod
-    def from_app(cls, app):
-        return cls(app.service('http', 'urls'),
-                   app.service('rest', 'json_schema_rewriter'))
-
-    def get_content_types(self):
-        return ['application/schema+json']
-
-    def to_json(self, response, content_type):
-        assert isinstance(response, JsonSchemaResponse)
-        return self._rewriter.rewrite(response.schema)
-
-    def get_json_schema(self):
-        return {
-            '$ref': 'http://json-schema.org/draft-04/schema#',
-        }
+class JsonSchemaResponseType(ResponseType):
+    def __init__(self):
+        super().__init__('schema', (JsonSchemaResponsePayloadType(
+            OutputProcessorType(JsonSchemaType(), lambda x: x.schema)),))
 
 
-class JsonSchemaEndpoint(Endpoint, AppAwareFactory):
-    NAME = 'schema'
-
-    @contract
-    def __init__(self, factory: Factory, endpoints: EndpointRepository,
-                 urls: EndpointUrlBuilder,
-                 error_response_metas: ErrorResponseMetaRepository):
-        super().__init__(factory, self.NAME,
-                         '/about/json/schema',
-                         NonConfigurableGetRequestMeta,
-                         JsonSchemaResponseMeta)
-        self._endpoints = endpoints
-        self._urls = urls
-        self._error_response_metas = error_response_metas
-
-    @classmethod
-    def from_app(cls, app):
-        return cls(app.factory, app.service('http', 'endpoints'),
-                   app.service('http', 'urls'),
-                   app.service('http', 'error_response_metas'))
+class JsonSchemaEndpoint(Endpoint):
+    def __init__(self):
+        super().__init__('schema', '/about/json/schema',
+                         NonConfigurableGetRequestType(),
+                         JsonSchemaResponseType())
+        self._endpoints = App.current.service('http', 'endpoints')
+        self._urls = App.current.service('http', 'urls')
+        self._error_response_type = ErrorResponseType()
 
     def handle(self, request):
         assert isinstance(request, NonConfigurableRequest)
@@ -264,36 +174,56 @@ class JsonSchemaEndpoint(Endpoint, AppAwareFactory):
         }
 
         for endpoint in self._endpoints.get_endpoints():
-            request_meta = endpoint.request_meta
-            schema['definitions'].setdefault('request', {})
-            schema['definitions']['request'].setdefault(
-                request_meta.name, request_meta.get_json_schema() if isinstance(request_meta, JsonMessageMeta) else {})
+            request_type = endpoint.request_type
+            for request_payload_type in request_type.get_payload_types():
+                if isinstance(request_payload_type, JsonRequestPayloadType):
+                    schema['definitions'].setdefault('request', {})
+                    schema['definitions']['request'].setdefault(
+                        request_type.name, request_payload_type.data_type.get_json_schema())
 
-            response_meta = endpoint.response_meta
-            schema['definitions'].setdefault('response', {})
-            schema['definitions']['response'].setdefault(
-                response_meta.name, response_meta.get_json_schema() if isinstance(response_meta, JsonMessageMeta) else {})
+            response_type = endpoint.response_type
+            for response_payload_type in response_type.get_payload_types():
+                if isinstance(response_payload_type, JsonResponsePayloadType):
+                    schema['definitions'].setdefault('response', {})
+                    schema['definitions']['response'].setdefault(
+                        response_type.name, response_payload_type.data_type.get_json_schema())
 
-        for error_response_meta in self._error_response_metas.get_metas():
-            schema['definitions'].setdefault('response', {})
-            schema['definitions']['response'].setdefault(
-                error_response_meta.name, error_response_meta.get_json_schema() if isinstance(error_response_meta, JsonMessageMeta) else {})
+        for error_response_payload_type in self._error_response_type.get_payload_types():
+            if isinstance(error_response_payload_type, JsonResponsePayloadType):
+                schema['definitions'].setdefault('response', {})
+                schema['definitions']['response'].setdefault(
+                    self._error_response_type.name,
+                    error_response_payload_type.data_type.get_json_schema() if isinstance(
+                        error_response_payload_type, JsonPayloadType) else {})
 
         return JsonSchemaResponse(schema)
 
 
-class ExternalJsonSchemaRequestMeta(RequestMeta):
-    NAME = 'external-schema'
-
+class JsonSchemaId(IdentifiableScalarType):
     def __init__(self):
-        super().__init__(self.NAME, 'GET')
+        super().__init__({
+            'title': 'A JSON Schema ID.',
+            'type': 'string',
+            'format': 'uri',
+        }, 'json-schema-id')
 
-    def from_http_request(self, http_request: HttpRequest,
-                          path_parameters: Dict):
-        return ExternalJsonSchemaRequest(base64_decodes(path_parameters['id']))
 
+class ExternalJsonSchemaRequestPayloadType(RequestPayloadType):
     def get_content_types(self):
-        return ['']
+        return '',
+
+    def from_http_request(self, http_request: HttpRequest):
+        return ExternalJsonSchemaRequest(
+            base64_decodes(http_request.arguments['id']))
+
+
+class ExternalJsonSchemaRequestType(RequestType):
+    def __init__(self):
+        super().__init__('external-schema', 'GET',
+                         (ExternalJsonSchemaRequestPayloadType(),))
+
+    def get_parameters(self):
+        return RequestParameter(JsonSchemaId(), name='id'),
 
 
 class ExternalJsonSchemaRequest(Request):
@@ -306,9 +236,9 @@ class ExternalJsonSchemaRequest(Request):
         return self._schema_url
 
 
-class ExternalJsonSchemaEndpoint(Endpoint, AppAwareFactory):
+class ExternalJsonSchemaEndpoint(Endpoint):
     """
-    Provides an endpoint that proxies an external JSON Schema. This circumvents
+    Provides an endpoint that serves an external JSON Schema. This circumvents
     Cross-Origin Resource Sharing (CORS) problems, by not requiring API clients
     to load external resources themselves, and allows us to fix incorrect
     headers, such as Content-Type.
@@ -316,22 +246,12 @@ class ExternalJsonSchemaEndpoint(Endpoint, AppAwareFactory):
     The {id} parameter is the base64-encoded URL of the schema to load.
     """
 
-    NAME = 'external-schema'
-
-    @contract
-    def __init__(self, factory: Factory, urls: EndpointUrlBuilder,
-                 schemas: SchemaRepository):
-        super().__init__(factory, self.NAME,
-                         '/about/json/external-schema/{id}',
-                         ExternalJsonSchemaRequestMeta,
-                         JsonSchemaResponseMeta)
-        self._urls = urls
-        self._schemas = schemas
-
-    @classmethod
-    def from_app(cls, app):
-        return cls(app.factory, app.service('http', 'urls'),
-                   app.service('rest', 'json_schemas'))
+    def __init__(self):
+        super().__init__('external-schema', '/about/json/external-schema/{id}',
+                         ExternalJsonSchemaRequestType(),
+                         JsonSchemaResponseType())
+        self._urls = App.current.service('http', 'urls')
+        self._schemas = App.current.service('json', 'schemas')
 
     def handle(self, request):
         assert isinstance(request, ExternalJsonSchemaRequest)
@@ -357,35 +277,26 @@ class ResourcesResponse(SuccessResponse):
 
 class GetResourcesEndpoint(Endpoint):
     @staticmethod
-    def _build_response_meta_class(resource_type: ResourceType):
-        class ResourcesResponseMeta(JsonResponseMeta, AppAwareFactory):
+    def _build_response_type_class(resource_type: ResourceType):
+        class ResourcesResponseType(ResponseType):
             _resource_type = resource_type
-            _type = ListType(resource_type)
+            _list_type = ListType(resource_type)
+            _type = OutputProcessorType(_list_type, lambda x: x.resources)
 
-            @contract
-            def __init__(self, urls: EndpointUrlBuilder):
-                super().__init__('%ss' % self._resource_type.name, urls)
+            def __init__(self):
+                super().__init__('%ss' % self._resource_type.name,
+                                 (JsonResponsePayloadType(self._type),))
 
-            @classmethod
-            def from_app(cls, app):
-                return cls(app.service('http', 'urls'))
-
-            def get_json_schema(self):
-                return self._type
-
-            def to_json(self, response, content_type):
-                assert isinstance(response, ResourcesResponse)
-                return self._type.to_json(response.resources)
-
-        return ResourcesResponseMeta
+        return ResourcesResponseType
 
     @contract
-    def __init__(self, factory: Factory, resources: ResourceRepository):
+    def __init__(self, resources: ResourceRepository):
         resource_name = resources.get_type().name
-        super().__init__(factory, '%ss' % resource_name,
+        super().__init__('%ss' % resource_name,
                          '/%ss' % resource_name,
-                         NonConfigurableGetRequestMeta,
-                         self._build_response_meta_class(resources.get_type()))
+                         NonConfigurableGetRequestType(),
+                         self._build_response_type_class(
+                             resources.get_type())())
         self._resources = resources
 
     def handle(self, request: Request):
@@ -413,54 +324,42 @@ class ResourceResponse(SuccessResponse):
         return self._resource
 
 
-class ResourceRequestMeta(RestRequestMeta, AppAwareFactory):
-    @contract
-    def __init__(self, validator: Validator):
-        super().__init__(validator, 'resource', 'GET')
-
-    @classmethod
-    def from_app(cls, app):
-        return cls(app.service('rest', 'json_validator'))
-
+class ResourceRequestPayloadType(RequestPayloadType):
     def get_content_types(self):
-        return ['']
+        return '',
 
-    def _from_rest_request(self, http_request, arguments):
-        return ResourceRequest(arguments['id'])
+    def from_http_request(self, http_request: HttpRequest):
+        return ResourceRequest(http_request.arguments['id'])
+
+
+class ResourceRequestType(RequestType):
+    def __init__(self):
+        super().__init__('resource', 'GET', (ResourceRequestPayloadType(),))
 
     def get_parameters(self):
-        return (RequestParameter(ResourceIdType(), name='id'),)
+        return RequestParameter(ResourceIdType(), name='id'),
 
 
 class GetResourceEndpoint(Endpoint):
     @staticmethod
-    def _build_response_meta_class(resource_type: ResourceType):
-        class ResourceResponseMeta(JsonResponseMeta, AppAwareFactory):
-            _type = resource_type
+    def _build_response_type_class(resource_type: ResourceType):
+        class ResourceResponseType(ResponseType):
+            _resource_type = resource_type
+            _type = OutputProcessorType(_resource_type, lambda x: x.resource)
 
-            @contract
-            def __init__(self, urls: EndpointUrlBuilder):
-                super().__init__('%s' % self._type.name, urls)
+            def __init__(self):
+                super().__init__('%s' % self._resource_type.name,
+                                 (JsonResponsePayloadType(self._type),))
 
-            @classmethod
-            def from_app(cls, app):
-                return cls(app.service('http', 'urls'))
-
-            def get_json_schema(self):
-                return self._type
-
-            def to_json(self, response, content_type):
-                assert isinstance(response, ResourceResponse)
-                return self._type.to_json(response.resource)
-
-        return ResourceResponseMeta
+        return ResourceResponseType
 
     @contract
-    def __init__(self, factory: Factory, resources: ResourceRepository):
+    def __init__(self, resources: ResourceRepository):
         resource_name = resources.get_type().name
-        super().__init__(factory, resource_name, '/%ss/{id}' % resource_name,
-                         ResourceRequestMeta,
-                         self._build_response_meta_class(resources.get_type()))
+        super().__init__(resource_name, '/%ss/{id}' % resource_name,
+                         ResourceRequestType(),
+                         self._build_response_type_class(
+                             resources.get_type())())
         self._resources = resources
 
     def handle(self, request: Request):
@@ -475,15 +374,14 @@ class ResourceEndpointRepository(EndpointRepository):
     """
     Provides endpoints for resource types.
     """
+
     @contract
-    def __init__(self, resources: Iterable, factory: Factory):
+    def __init__(self, resources: Iterable):
         """
 
         :param resources: Iterable[ResourceRepository]
-        :param factory:
         """
         self._resources = resources
-        self._factory = factory
         self._endpoints = None
 
     def get_endpoints(self):
@@ -500,8 +398,8 @@ class ResourceEndpointRepository(EndpointRepository):
     @contract
     def _aggregate_resource_endpoints(self, resources: ResourceRepository):
         endpoints = [
-            GetResourceEndpoint(self._factory, resources),
-            GetResourcesEndpoint(self._factory, resources),
+            GetResourceEndpoint(resources),
+            GetResourcesEndpoint(resources),
         ]
 
         return endpoints

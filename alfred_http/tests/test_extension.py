@@ -1,25 +1,22 @@
 from unittest import TestCase
 
-from contracts import contract
-
-from alfred.app import App, Extension, Factory
-from alfred.extension import AppAwareFactory
+from alfred.app import App, Extension
 from alfred_http.endpoints import EndpointRepository, EndpointUrlBuilder, \
-    EndpointFactoryRepository, Endpoint, SuccessResponseMeta, \
-    NonConfigurableRequestMeta
+    Endpoint, StaticEndpointRepository, EmptyResponseType, SuccessResponse, \
+    Request, \
+    NonConfigurableGetRequestType
 from alfred_http.extension import HttpExtension
 
 
 class HttpExtensionTest(TestCase):
-    class TestEndpoint(Endpoint, AppAwareFactory):
-        @contract
-        def __init__(self, factory: Factory):
-            super().__init__(factory, 'http_test', 'http/test',
-                             NonConfigurableRequestMeta, SuccessResponseMeta)
+    class TestEndpoint(Endpoint):
+        def __init__(self):
+            super().__init__('http_test', 'http/test',
+                             NonConfigurableGetRequestType(),
+                             EmptyResponseType())
 
-        @classmethod
-        def from_app(cls, app):
-            return cls(app.factory)
+        def handle(self, request: Request):
+            return SuccessResponse()
 
     class EndpointProvidingExtension(Extension):
         @staticmethod
@@ -32,18 +29,20 @@ class HttpExtensionTest(TestCase):
 
         @Extension.service(tags=('http_endpoints',))
         def _endpoints(self):
-            return EndpointFactoryRepository(self._app.factory, [
-                HttpExtensionTest.TestEndpoint
+            return StaticEndpointRepository([
+                HttpExtensionTest.TestEndpoint(),
             ])
 
     def test_endpoints(self):
         app = App()
-        app.add_extension(self.EndpointProvidingExtension)
-        endpoints = app.service('http', 'endpoints')
-        self.assertIsInstance(endpoints, EndpointRepository)
+        with app:
+            app.add_extension(self.EndpointProvidingExtension)
+            endpoints = app.service('http', 'endpoints')
+            self.assertIsInstance(endpoints, EndpointRepository)
 
     def test_urls(self):
         app = App()
-        app.add_extension(HttpExtension)
-        urls = app.service('http', 'urls')
-        self.assertIsInstance(urls, EndpointUrlBuilder)
+        with app:
+            app.add_extension(HttpExtension)
+            urls = app.service('http', 'urls')
+            self.assertIsInstance(urls, EndpointUrlBuilder)

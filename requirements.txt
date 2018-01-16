@@ -1,5 +1,6 @@
--r ./alfred/requirements.txt
--r ./alfred_http/requirements.txt
--r ./alfred_manor/requirements.txt
--r ./alfred_openapi/requirements.txt
--r ./alfred_rest/requirements.txt
+apispec ~= 0.27.0
+flask ~= 0.12.2
+flask-cors ~= 3.0.3
+jinja2 ~= 2.10
+jsonschema ~= 2.6
+pycontracts ~= 1.8.0

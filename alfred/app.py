@@ -1,34 +1,9 @@
 import abc
-import traceback
 from typing import Iterable, Optional, Callable
 
 from contracts import contract, ContractsMeta, with_metaclass
 
-from alfred import indent, qualname, format_iter
-
-
-class LazyValue:
-    def __init__(self, factory: Callable):
-        """
-
-        :param factory: A callable that has no required parameters.
-        """
-        self._factory = factory
-        self._produced = False
-        self._value = None
-
-    @property
-    def value(self):
-        return self._produce()
-
-    def __get__(self, instance, owner):
-        return self._produce()
-
-    def _produce(self):
-        if not self._produced:
-            self._value = self._factory()
-            self._produced = True
-        return self._value
+from alfred import indent, format_iter
 
 
 class ExtensionError(BaseException):
@@ -51,86 +26,8 @@ class RecursiveServiceDependency(RecursionError, ServiceError):
     pass
 
 
-class FactoryError(RuntimeError):
-    pass
-
-
-class Factory:
-    @contract
-    def defer(self, spec) -> LazyValue:
-        def lazy_factory():
-            return self.new(spec)
-
-        return LazyValue(lazy_factory)
-
-    def new(self, spec):
-        pass
-
-
-class CallableFactory(Factory):
-    def new(self, spec):
-        if not callable(spec):
-            raise FactoryError(
-                'Specification must be a callable, but is a %s.' % type(spec))
-        try:
-            return spec()
-        except Exception:
-            raise FactoryError(
-                'Fix the following error that occurs when %s() is called:\n%s' %
-                (spec, indent(traceback.format_exc())))
-
-
-class ClassFactory(Factory):
-    def new(self, spec):
-        if not isinstance(spec, type):
-            raise FactoryError(
-                'Specification must be a class, but is a %s.' % type(spec))
-        try:
-            return spec()
-        except Exception as e:
-            raise FactoryError(
-                "Fix the following error that occurs in %s.__init__():\n%s" %
-                (qualname(spec), indent(traceback.format_exc())))
-
-
-class MultipleFactories(Factory):
-    def __init__(self):
-        self._factories = []
-        self._loop = False
-
-    @contract
-    def set_factories(self, factories: Iterable):
-        self._factories = factories
-
-    def new(self, spec):
-        if not self._factories:
-            raise FactoryError(
-                'No factories available. Add them through .add_factory().')
-
-        requirements = []
-        for factory in self._factories:
-            try:
-                instance = factory.new(spec)
-                return instance
-            except FactoryError:
-                requirements.append(
-                    indent(traceback.format_exc()))
-        message = [
-            'Could not use specification "%s". One of the following requirements must be met:' % str(
-                spec)]
-
-        requirements = set(requirements)
-        for requirement in requirements:
-            message.append("\n".join(
-                map(lambda line: '    %s' % line, requirement.split("\n"))))
-            message.append('OR')
-        message = message[:-1]
-
-        raise FactoryError("\n".join(message))
-
-
 class ServiceDefinition:
-    def __init__(self, extension_name: str, name: str, factory,
+    def __init__(self, extension_name: str, name: str, factory: Callable,
                  tags: Optional[Iterable[str]] = None,
                  weight: int = 0):
         self._extension_name = extension_name
@@ -221,20 +118,13 @@ class Extension(with_metaclass(ContractsMeta)):
             """
             name = self._name if self._name is not None else self._factory.__name__.strip(
                 '_')
-            return ServiceDefinition(instance.name(), name, self.NamedServiceFactory(self._factory, instance), self._tags, weight=self._weight)
+            return ServiceDefinition(instance.name(), name,
+                                     self.NamedServiceFactory(self._factory,
+                                                              instance),
+                                     self._tags, weight=self._weight)
 
-    def __init__(self, app: 'App'):
-        self._app = app
+    def __init__(self):
         self._service_definitions = []
-
-    @classmethod
-    def from_app(cls, app):
-        """
-        Constructs a new instance based on an application.
-        :param app:
-        :return:
-        """
-        return cls(app)
 
     @staticmethod
     @abc.abstractmethod
@@ -254,70 +144,57 @@ class Extension(with_metaclass(ContractsMeta)):
 
 
 class App:
+    """
+    Provides Alfred's core application.
+
+    This class allows at most one instance of itself to be active. To active an
+    instance, simply call start() and stop(), or use a context:
+    >>> app = App()
+    >>> # Implicitly call the (de)activation methods.
+    >>> app.start()
+    >>> # Make the app do something.
+    >>> app.stop()
+    >>> # Or use a context for this to be done automatically:
+    >>> with app:
+    >>>     # Make the app do something.
+    """
+
+    # The currently running App, or None if no App is running.
+    current = None
+
     def __init__(self):
         self._extensions = {}
         self._service_definitions = {}
         self._services = {}
         self._service_stack = []
-        self._bootstrap()
 
-    def _bootstrap(self):
-        """
-        Adds required core services.
-        Optional core services are added through CoreExtension.
-        :return:
-        """
+    def __enter__(self):
+        self.start()
+        return self
 
-        callable_factory_definition = ServiceDefinition('core', 'factory.callable',
-                                                        lambda: CallableFactory(),
-                                                        ('factory',))
-        self._add_bootstrap_service(callable_factory_definition)
-        class_factory_definition = ServiceDefinition('core', 'factory.class',
-                                                     lambda: ClassFactory(),
-                                                     ('factory',))
-        self._add_bootstrap_service(class_factory_definition)
-        multiple_factory_definition = ServiceDefinition('core', 'factory.multiple',
-                                                        self._multiple_factory_factory)
-        self._add_bootstrap_service(multiple_factory_definition)
-        factory_definition = ServiceDefinition('core', 'factory',
-                                               self._factory_factory)
-        self._add_bootstrap_service(factory_definition)
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.stop()
 
-    @contract
-    def _add_bootstrap_service(self, definition: ServiceDefinition):
-        assert 'core' == definition.extension_name
-        self._service_definitions.setdefault(definition.extension_name, {})
-        self._services.setdefault(definition.extension_name, {})
-        self._service_definitions[definition.extension_name][
-            definition.name] = definition
-        self._services[definition.extension_name][definition.name] = LazyValue(
-            definition.factory)
+    def start(self):
+        if self.__class__.current is not None:
+            raise RuntimeError(
+                'Another instance of Alfred is already running.')
+        self.__class__.current = self
 
-    @property
-    def factory(self) -> Factory:
-        return self.service('core', 'factory')
-
-    @contract
-    def _multiple_factory_factory(self) -> Factory:
-        factory = MultipleFactories()
-        factory.set_factories(self.services(tag='factory'))
-        return factory
-
-    @contract
-    def _factory_factory(self) -> Factory:
-        # This is just an alias.
-        return self.service('core', 'factory.multiple')
+    def stop(self):
+        if self.__class__.current is None:
+            return
+        if self.__class__.current is not self:
+            raise RuntimeError(
+                'Another instance of Alfred is already running, and it cannot be stopped through this instance.')
+        self.__class__.current = None
 
     @contract
     def _add_service(self, service_definition: ServiceDefinition):
-        service = self.factory.defer(service_definition.factory)
         self._service_definitions.setdefault(
             service_definition.extension_name, {})
         self._service_definitions[service_definition.extension_name][
             service_definition.name] = service_definition
-        self._services.setdefault(service_definition.extension_name, {})
-        self._services[service_definition.extension_name][
-            service_definition.name] = service
 
     def add_extension(self, extension_class: type):
         assert issubclass(extension_class, Extension)
@@ -325,7 +202,7 @@ class App:
         for dependency_extension_class in extension_class.dependencies():
             self.add_extension(dependency_extension_class)
 
-        extension = extension_class.from_app(self)
+        extension = extension_class()
 
         self._extensions[extension.name()] = extension
 
@@ -333,12 +210,6 @@ class App:
         for service_definition in extension.service_definitions:
             assert service_definition.extension_name == extension.name()
             self._add_service(service_definition)
-
-        # @todo This is a workaround to make the factory work. It should
-        #  eventually be replaced by an event dispatcher and events for adding
-        #  (and removing) extensions.
-        self.service('core', 'factory.multiple').set_factories(
-            self.services(tag='factory'))
 
     @contract
     def service(self, extension_name: str, service_name: str):
@@ -361,29 +232,25 @@ class App:
                 (service_name, extension_name,
                  ', '.join(extension_service_definitions.keys())))
 
+        # Return the service if we instantiated it before.
+        if extension_name in self._services and service_name in self._services[extension_name]:
+            return self._services[extension_name][service_name]
+
         # Check for infinite loops.
         if service_definition in self._service_stack:
+            # Add the definition to the stack, so it can be inspected.
             self._service_stack.append(service_definition)
             raise RecursiveServiceDependency(
-                'Infinite loop when requesting service %s for extension %s twice. Stack trace, with the original service request first:\n%s' % (
+                'Infinite loop when requesting service "%s" for extension "%s" twice. Stack trace, with the original service request first:\n%s' % (
                     service_name, extension_name,
                     indent(format_iter(self._service_stack))))
 
-        # Retrieve the service.
+        # Instantiate and return the service.
         self._service_stack.append(service_definition)
         try:
-            return self._services[extension_name][service_name].value
-        except ExtensionError as e:
-            raise e
-        except ServiceError as e:
-            raise e
-        except FactoryError as e:
-            raise e
-        # Convert non-API exceptions to API-specific exceptions.
-        except Exception:
-            raise FactoryError(
-                'Could not request service %s for extension %s.' % (
-                    service_name, extension_name))
+            service = service_definition.factory()
+            self._services[extension_name][service_name] = service
+            return service
         finally:
             self._service_stack.pop()
 
