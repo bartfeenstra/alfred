@@ -4,6 +4,12 @@ python:
     - "3.5"
     - "3.6"
 
+addons:
+  apt:
+    packages:
+    - libpulse-dev
+    - swig
+
 install:
     - ./bin/build-dev
 

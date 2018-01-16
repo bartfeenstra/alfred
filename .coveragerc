@@ -1,0 +1,8 @@
+[run]
+source =
+    alfred
+    alfred_graphql
+    alfred_speech
+
+omit =
+    */test*.py

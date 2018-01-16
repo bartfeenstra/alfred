@@ -1,20 +1,16 @@
 from subprocess import call
 
-from contracts import contract
-
 _dmx_values = {
     'color': '#abcdef',
     'luminosity': 0,
 }
 
 
-@contract()
 def dmx_get_values() -> dict:
     global _dmx_values
     return _dmx_values
 
 
-@contract
 def dmx_set_values(color: str, luminosity: int) -> dict:
     # This assumes:
     # - 4 identical lights.
@@ -38,4 +34,4 @@ def dmx_set_values(color: str, luminosity: int) -> dict:
 
 # Reset the lights.
 # @todo Does this execute every single time the module is included?
-dmx_set_values(_dmx_values['color'], _dmx_values['luminosity'])
+# dmx_set_values(_dmx_values['color'], _dmx_values['luminosity'])
