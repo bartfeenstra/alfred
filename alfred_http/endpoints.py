@@ -191,13 +191,6 @@ class RequestType(MessageType):
             if content_type in payload_type.get_content_types():
                 return payload_type.from_http_request(http_request)
 
-        print('NEMAN')
-        print(content_type)
-        print(http_request.body)
-        print(http_request.body.content)
-        for pt in self._payload_types:
-            print(pt)
-            print(pt.get_content_types())
         raise UnsupportedMediaTypeError(description='Could not parse the "%s" HTTP payload for request "%s"' % (
             content_type, self.name))
 
