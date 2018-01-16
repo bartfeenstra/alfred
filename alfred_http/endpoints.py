@@ -4,17 +4,21 @@ from typing import Iterable, Optional, Dict
 
 from contracts import contract, ContractsMeta, with_metaclass
 from flask import url_for
+
 from alfred import format_iter
 from alfred.app import App
 from alfred.dispatch import dispatch
 from alfred_http.http import HttpRequest, HttpResponse, HttpResponseBuilder
+from alfred_json.type import IdentifiableScalarType, InputDataType
 
 
 class Error(Exception):
     @contract
-    def __init__(self, code: str, title: str, http_response_status_code: int):
+    def __init__(self, code: str, title: str, http_response_status_code: int,
+                 description=''):
         self._code = code
         self._title = title
+        self._description = description
         self._http_response_status_code = http_response_status_code
 
     @property
@@ -29,6 +33,11 @@ class Error(Exception):
 
     @property
     @contract
+    def description(self) -> str:
+        return self._description
+
+    @property
+    @contract
     def http_response_status_code(self) -> int:
         return self._http_response_status_code
 
@@ -36,36 +45,36 @@ class Error(Exception):
 class NotFoundError(Error):
     CODE = 'not_found'
 
-    def __init__(self):
-        super().__init__(self.CODE, 'Not found', 404)
+    def __init__(self, **kwargs):
+        super().__init__(self.CODE, 'Not found', 404, **kwargs)
 
 
 class NotAcceptableError(Error):
     CODE = 'not_acceptable'
 
-    def __init__(self):
-        super().__init__(self.CODE, 'Not acceptable', 406)
+    def __init__(self, **kwargs):
+        super().__init__(self.CODE, 'Not acceptable', 406, **kwargs)
 
 
 class UnsupportedMediaTypeError(Error):
     CODE = 'unsupported_media_type'
 
-    def __init__(self):
-        super().__init__(self.CODE, 'Unsupported media type', 415)
+    def __init__(self, **kwargs):
+        super().__init__(self.CODE, 'Unsupported media type', 415, **kwargs)
 
 
 class BadGatewayError(Error):
     CODE = 'bad_gateway'
 
-    def __init__(self):
-        super().__init__(self.CODE, 'Bad gateway', 502)
+    def __init__(self, **kwargs):
+        super().__init__(self.CODE, 'Bad gateway', 502, **kwargs)
 
 
 class GatewayTimeoutError(Error):
     CODE = 'gateway_timeout'
 
-    def __init__(self):
-        super().__init__(self.CODE, 'Gateway timeout', 504)
+    def __init__(self, **kwargs):
+        super().__init__(self.CODE, 'Gateway timeout', 504, **kwargs)
 
 
 class MessageType(with_metaclass(ContractsMeta)):
@@ -78,30 +87,95 @@ class MessageType(with_metaclass(ContractsMeta)):
     def name(self) -> str:
         return self._name
 
-    @abc.abstractmethod
-    def get_content_types(self) -> Iterable[str]:
-        pass
-
 
 class Message(with_metaclass(ContractsMeta)):
     pass
+
+
+class PayloadType(with_metaclass(ContractsMeta)):
+    @abc.abstractmethod
+    def get_content_types(self) -> Iterable[str]:
+        pass
 
 
 class Request(Message):
     pass
 
 
+class RequestParameter:
+    @contract
+    def __init__(self, data_type: IdentifiableScalarType, name=None,
+                 required=True,
+                 cardinality=1):
+        assert isinstance(data_type, InputDataType)
+        self.assert_valid_type(data_type.get_json_schema())
+        self._type = data_type
+        assert cardinality > 0
+        # Required parameters appear in paths, and we do not support multiple
+        #  values there.
+        if required:
+            assert 1 == cardinality
+        self._required = required
+        self._cardinality = cardinality
+        self._name = name
+
+    @property
+    @contract
+    def name(self) -> str:
+        return self._name if self._name is not None else self.type.name
+
+    @property
+    @contract
+    def required(self) -> bool:
+        return self._required
+
+    @property
+    @contract
+    def cardinality(self) -> int:
+        return self._cardinality
+
+    @property
+    @contract
+    def type(self) -> IdentifiableScalarType:
+        return self._type
+
+    @staticmethod
+    @contract
+    def assert_valid_type(schema: Dict):
+        if 'enum' in schema:
+            for value in schema['enum']:
+                assert isinstance(value,
+                                  (str, int, float, bool)) or value is None
+        elif 'type' in schema:
+            assert schema['type'] in ('string', 'number', 'boolean')
+
+
+class RequestPayloadType(PayloadType):
+    @abc.abstractmethod
+    @contract
+    def from_http_request(self, http_request: HttpRequest) -> Request:
+        """
+        Converts an HTTP request to an API request.
+
+        The HTTP request MUST be valid for this request. If it is not,
+        developer-facing exceptions may be raised.
+        :param http_request:
+        :return:
+        """
+        pass
+
+
 class RequestType(MessageType):
     _allowed_methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
 
     @contract
-    def __init__(self, name: str, method: str):
+    def __init__(self, name: str, method: str, payload_types: Iterable):
         super().__init__(name)
         method = method.upper()
         assert method in self._allowed_methods
         self._method = method
+        self._payload_types = payload_types
 
-    @abc.abstractmethod
     @contract
     def from_http_request(self, http_request: HttpRequest) -> Request:
         """
@@ -112,7 +186,20 @@ class RequestType(MessageType):
         :param http_request:
         :return:
         """
-        pass
+        content_type = http_request.body.content_type if http_request.body else ''
+        for payload_type in self._payload_types:
+            if content_type in payload_type.get_content_types():
+                return payload_type.from_http_request(http_request)
+
+        print('NEMAN')
+        print(content_type)
+        print(http_request.body)
+        print(http_request.body.content)
+        for pt in self._payload_types:
+            print(pt)
+            print(pt.get_content_types())
+        raise UnsupportedMediaTypeError(description='Could not parse the "%s" HTTP payload for request "%s"' % (
+            content_type, self.name))
 
     @property
     def method(self) -> str:
@@ -130,14 +217,22 @@ class RequestType(MessageType):
     @validate_http_request.register()
     @contract
     def _validate_http_request_arguments(self, http_request: HttpRequest):
-        validator = App.current.service('rest', 'json_validator')
+        validator = App.current.service('json', 'validator')
         for parameter in self.get_parameters():
             name = parameter.name
             if parameter.required and name not in http_request.arguments:
-                raise RuntimeError('Request type "%s" (%s) requires URL path parameter "%s". Make sure the endpoint defines this parameter in its path.' % (
-                    self.name, type(self), name))
+                raise RuntimeError(
+                    'Request type "%s" (%s) requires URL path parameter "%s". Make sure the endpoint defines this parameter in its path.' % (
+                        self.name, type(self), name))
             validator.validate(
                 http_request.arguments[name], parameter.type)
+
+    @contract
+    def get_payload_types(self) -> Iterable:
+        """
+        :return: Iterable[RequestPayloadType]
+        """
+        return self._payload_types
 
     @contract
     def get_parameters(self) -> Iterable:
@@ -158,13 +253,11 @@ class NonConfigurableRequestType(RequestType):
 
     @contract
     def __init__(self, method: str):
-        super().__init__('non-configurable-%s' % method.lower(), method)
+        super().__init__('non-configurable-%s' % method.lower(), method,
+                         (EmptyPayloadType(),))
 
     def from_http_request(self, http_request):
         return NonConfigurableRequest()
-
-    def get_content_types(self):
-        return ['']
 
 
 class NonConfigurableGetRequestType(NonConfigurableRequestType):
@@ -180,7 +273,32 @@ class Response(Message):
         pass
 
 
+class ResponsePayloadType(PayloadType):
+    @abc.abstractmethod
+    @contract
+    def to_http_response(self, response: Response,
+                         content_type: str) -> HttpResponseBuilder:
+        """
+        Converts an API response to an HTTP response.
+        :param response: Response
+        :return: HttpBody
+        """
+        pass
+
+
 class ResponseType(MessageType):
+    @contract
+    def __init__(self, name, payload_types: Iterable):
+        super().__init__(name)
+        self._payload_types = payload_types
+
+    @contract
+    def get_payload_types(self) -> Iterable:
+        """
+        :return: Iterable[ResponsePayloadType]
+        """
+        return self._payload_types
+
     @contract
     def to_http_response(self, response: Response,
                          content_type: str) -> HttpResponse:
@@ -189,28 +307,18 @@ class ResponseType(MessageType):
         :param response:
         :return:
         """
-        assert content_type in self.get_content_types()
-        http_response = HttpResponseBuilder()
-        self._build_http_response(response, content_type, http_response)
-        return http_response.to_response()
-
-    @dispatch()
-    @contract
-    def _build_http_response(self, response: Response,
-                             content_type: str, http_response: HttpResponseBuilder):
-        """
-        Builds an HTTP response from an API response.
-
-        Decorate your own class methods with @_build_http_response.register()
-        to have them executed along with this method.
-        """
-        pass
-
-    @_build_http_response.register()
-    @contract
-    def _build_http_response_status(self, response: Response,
-                                    content_type: str, http_response: HttpResponseBuilder):
+        http_response = None
+        for payload_type in self._payload_types:
+            if content_type in payload_type.get_content_types():
+                http_response = payload_type.to_http_response(
+                    response, content_type)
+                break
+        if not http_response:
+            raise RuntimeError(
+                'Could not build a "%s" HTTP body for response "%s"' % (
+                    content_type, self.name))
         http_response.status = response.http_response_status_code
+        return http_response.to_response()
 
 
 class SuccessResponse(Response):
@@ -241,26 +349,26 @@ class ErrorResponse(Response):
         return self._errors[0].http_response_status_code
 
 
+class ErrorResponseType(ResponseType):
+    def __init__(self):
+        super().__init__('error', App.current.services(
+            tag='error_response_payload_type'))
+
+
+class EmptyPayloadType(RequestPayloadType, ResponsePayloadType):
+    def get_content_types(self):
+        return '',
+
+    def from_http_request(self, http_request: HttpRequest):
+        return NonConfigurableRequest()
+
+    def to_http_response(self, response, content_type):
+        return HttpResponseBuilder()
+
+
 class EmptyResponseType(ResponseType):
     def __init__(self):
-        super().__init__('empty')
-
-    def get_content_types(self):
-        return ['']
-
-
-class ErrorResponseTypeRepository(with_metaclass(ContractsMeta)):
-    def __init__(self):
-        self._types = {}
-
-    @contract
-    def add_type(self, type: ResponseType):
-        assert type.name not in self._types
-        self._types[type.name] = type
-
-    @contract
-    def get_types(self) -> Iterable:
-        return list(self._types.values())
+        super().__init__('empty', (EmptyPayloadType(),))
 
 
 class Endpoint(with_metaclass(ContractsMeta)):

@@ -3,12 +3,14 @@ from contracts import contract
 from flask import request
 
 from alfred_http.endpoints import EndpointRepository, EndpointUrlBuilder
-from alfred_rest.endpoints import JsonMessageType
+from alfred_rest.endpoints import JsonRequestPayloadType, \
+    JsonResponsePayloadType
 
 
 class OpenApi:
     @contract
-    def __init__(self, endpoints: EndpointRepository, urls: EndpointUrlBuilder):
+    def __init__(self, endpoints: EndpointRepository,
+                 urls: EndpointUrlBuilder):
         self._endpoints = endpoints
         self._urls = urls
 
@@ -32,11 +34,16 @@ class OpenApi:
         paths_operations = {}
         for endpoint in self._endpoints.get_endpoints():
             method = endpoint.request_type.method.lower()
-
+            consumes = []
+            for payload_type in endpoint.response_type.get_payload_types():
+                consumes += payload_type.get_content_types()
+            produces = []
+            for payload_type in endpoint.response_type.get_payload_types():
+                produces += payload_type.get_content_types()
             operation = {
                 'operationId': endpoint.name,
-                'consumes': endpoint.request_type.get_content_types(),
-                'produces': endpoint.response_type.get_content_types(),
+                'consumes': consumes,
+                'produces': produces,
                 'responses': {
                     200: {
                         'description': 'A successful response.',
@@ -51,14 +58,18 @@ class OpenApi:
                 'parameters': [],
             }
 
-            if isinstance(endpoint.request_type, JsonMessageType):
+            request_payload_types = endpoint.request_type.get_payload_types()
+            if any(map(lambda x: isinstance(x, JsonRequestPayloadType),
+                       request_payload_types)):
                 operation['parameters'].append({
                     'name': 'body',
                     'description': 'The HTTP request body.',
                     'in': 'body',
                     'required': True,
                     'schema': {
-                        '$ref': '%s#/definitions/request/%s' % (self._urls.build('schema'), endpoint.request_type.name),
+                        '$ref': '%s#/definitions/request/%s' % (
+                            self._urls.build('schema'),
+                            endpoint.request_type.name),
                     },
                 })
 
@@ -68,21 +79,26 @@ class OpenApi:
                 #  support schema references.
                 parameter_spec = parameter.type
                 # Do our best to make the JSON Schema Swagger compliant.
-                if 'title' in parameter_spec:
-                    if 'description' not in parameter_spec:
-                        parameter_spec['description'] = parameter_spec['title']
-                    del parameter_spec['title']
+                parameter_schema = parameter_spec.get_json_schema()
+                if 'title' in parameter_schema:
+                    if 'description' not in parameter_schema:
+                        parameter_schema['description'] = parameter_schema[
+                            'title']
+                    del parameter_schema['title']
                 # Set required properties.
-                parameter_spec.update({
+                parameter_schema.update({
                     'name': parameter.name,
                     'in': 'path' if parameter.required else 'query',
                     'required': parameter.required,
                 })
-                operation['parameters'].append(parameter_spec)
+                operation['parameters'].append(parameter_schema)
 
-            if isinstance(endpoint.response_type, JsonMessageType):
+            response_payload_types = endpoint.response_type.get_payload_types()
+            if any(map(lambda x: isinstance(x, JsonResponsePayloadType),
+                       response_payload_types)):
                 operation['responses'][200]['schema'] = {
-                    '$ref': '%s#/definitions/response/%s' % (self._urls.build('schema'), endpoint.response_type.name),
+                    '$ref': '%s#/definitions/response/%s' % (
+                        self._urls.build('schema'), endpoint.response_type.name),
                 }
 
             paths_operations.setdefault(endpoint.path, {})

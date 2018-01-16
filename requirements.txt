@@ -1,5 +1,6 @@
 -r ./alfred/requirements.txt
 -r ./alfred_http/requirements.txt
+-r ./alfred_json/requirements.txt
 -r ./alfred_manor/requirements.txt
 -r ./alfred_openapi/requirements.txt
 -r ./alfred_rest/requirements.txt

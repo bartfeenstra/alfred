@@ -2,14 +2,19 @@ from flask_cors import CORS
 
 from alfred.app import Extension, App
 from alfred_http.endpoints import NestedEndpointRepository, EndpointUrlBuilder, \
-    ErrorResponseTypeRepository, EmptyResponseType
+    EmptyPayloadType
 from alfred_http.flask.app import FlaskApp
+from alfred_json.extension import JsonExtension
 
 
 class HttpExtension(Extension):
     @staticmethod
     def name():
         return 'http'
+
+    @staticmethod
+    def dependencies():
+        return [JsonExtension]
 
     @Extension.service()
     def _endpoints(self):
@@ -34,12 +39,9 @@ class HttpExtension(Extension):
         return EndpointUrlBuilder(App.current.service('http', 'endpoints'))
 
     @Extension.service()
-    def _error_response_types(self):
-        types = ErrorResponseTypeRepository()
-        for tagged_type in App.current.services(tag='error_response_type'):
-            types.add_type(tagged_type)
-        return types
+    def _error_response_payload_types(self):
+        return App.current.services(tag='error_response_payload_type')
 
-    @Extension.service(tags=('error_response_type',), weight=999)
-    def _empty_error_response_type(self):
-        return EmptyResponseType()
+    @Extension.service(tags=('error_response_payload_type',))
+    def _empty_error_response_payload_type(self):
+        return EmptyPayloadType()

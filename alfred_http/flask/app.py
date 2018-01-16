@@ -2,13 +2,14 @@ from typing import List, Dict
 from urllib.parse import urlparse
 
 from contracts import contract
-from flask import Flask, request as current_http_request, Response as FlaskHttpResponse
+from flask import Flask, request as current_http_request, \
+    Response as FlaskHttpResponse
 from flask.views import MethodView
 
 from alfred.app import App
 from alfred_http.endpoints import Error, \
     ErrorResponse, Endpoint, Request, NotAcceptableError, \
-    UnsupportedMediaTypeError
+    UnsupportedMediaTypeError, ResponseType, ErrorResponseType
 from alfred_http.http import HttpRequest, HttpBody, HttpResponse
 
 
@@ -20,15 +21,14 @@ class EmptyFlaskHttpResponse(FlaskHttpResponse):
 
 
 @contract
-def flask_to_alfred_http_request(flask_http_request, endpoint: Endpoint, kwargs: Dict) -> HttpRequest:
-    content_type = flask_http_request.accept_mimetypes.best_match(
-        endpoint.response_type.get_content_types())
+def flask_to_alfred_http_request(flask_http_request, endpoint: Endpoint,
+                                 kwargs: Dict) -> HttpRequest:
     request_charset = flask_http_request.mimetype_params.get(
         'charset')
     charset = request_charset if request_charset else 'utf-8'
     request_body_data = flask_http_request.get_data().decode(
         charset)
-    request_body = HttpBody(request_body_data, content_type)
+    request_body = HttpBody(request_body_data, current_http_request.mimetype)
     request_parameters = {}
     for request_parameter in endpoint.request_type.get_parameters():
         request_parameters[
@@ -42,9 +42,7 @@ def flask_to_alfred_http_request(flask_http_request, endpoint: Endpoint, kwargs:
             query_values = flask_http_request.args.getlist(
                 query_name)
             # Use a single value, if it's expected and encountered.
-            if request_parameters[
-                    query_name].cardinality == 1 and [
-                    query_value] == query_values:
+            if request_parameters[query_name].cardinality == 1 and [query_value] == query_values:
                 request_arguments[query_name] = query_value
             # In all other cases, pass on a list of the values.
             else:
@@ -63,7 +61,8 @@ def flask_to_alfred_http_request(flask_http_request, endpoint: Endpoint, kwargs:
 
 
 @contract
-def alfred_to_flask_http_response(alfred_http_response: HttpResponse) -> FlaskHttpResponse:
+def alfred_to_flask_http_response(
+        alfred_http_response: HttpResponse) -> FlaskHttpResponse:
     http_response = EmptyFlaskHttpResponse()
     http_response.status = str(alfred_http_response.status)
     for header_name, header_value in alfred_http_response.headers.items():
@@ -73,6 +72,21 @@ def alfred_to_flask_http_response(alfred_http_response: HttpResponse) -> FlaskHt
         http_response.headers.set('Content-Type', body.content_type)
         http_response.set_data(body.content)
     return http_response
+
+
+@contract
+def validate_accept(response_type: ResponseType):
+    accepted_content_types = []
+    for payload_type in response_type.get_payload_types():
+        # Flask does not like empty content types, but we use them.
+        accepted_content_types += list(filter(lambda x: x !=
+                                              '', payload_type.get_content_types()))
+    content_type = current_http_request.accept_mimetypes.best_match(
+        accepted_content_types)
+    if content_type is None:
+        raise NotAcceptableError(
+            description='This endpoint only returns one of the following content types: %s' % ', '.join(accepted_content_types))
+    return content_type
 
 
 class FlaskApp(Flask):
@@ -118,14 +132,14 @@ class EndpointView(MethodView):
     def _build_view(app: App, endpoint: Endpoint):
         def _view(**kwargs):
             try:
-                # Check we can produce the requested content type.
-                content_type = current_http_request.accept_mimetypes.best_match(
-                    endpoint.response_type.get_content_types())
-                if content_type is None:
-                    raise NotAcceptableError()
+                content_type = validate_accept(endpoint.response_type)
 
                 # Check the request consumes the provided content type.
-                if current_http_request.mimetype not in endpoint.request_type.get_content_types():
+                supported_media_types = []
+                for payload_type in endpoint.request_type.get_payload_types():
+                    for supported_media_type in payload_type.get_content_types():
+                        supported_media_types.append(supported_media_type)
+                if current_http_request.mimetype not in supported_media_types:
                     raise UnsupportedMediaTypeError()
 
                 alfred_http_request = flask_to_alfred_http_request(
@@ -149,26 +163,16 @@ class EndpointView(MethodView):
 
             except Error as e:
                 alfred_response = ErrorResponse().with_error(e)
-                types = app.service('http', 'error_response_types').get_types()
-                types_by_content_type = {}
-                for type in types:
-                    for content_type in type.get_content_types():
-                        types_by_content_type.setdefault(content_type, [])
-                        types_by_content_type[content_type].append(type)
-                empty_types = types_by_content_type['']
-                del types_by_content_type['']
 
-                # Check we can produce the requested content type.
-                content_type = current_http_request.accept_mimetypes.best_match(
-                    types_by_content_type.keys())
-                # Fall back to not including any content at all.
-                if content_type is None:
+                error_response_type = ErrorResponseType()
+
+                try:
+                    content_type = validate_accept(error_response_type)
+                except NotAcceptableError:
+                    # We know there is a payload type that outputs no content.
                     content_type = ''
-                    type = empty_types[0]
-                else:
-                    type = types_by_content_type[content_type][0]
 
-                alfred_http_response = type.to_http_response(
+                alfred_http_response = error_response_type.to_http_response(
                     alfred_response, content_type)
 
                 return alfred_to_flask_http_response(alfred_http_response)

@@ -1,14 +1,15 @@
 import traceback
 from typing import Optional, Dict, Iterable
+from urllib.parse import urldefrag
 
-import requests
 from contracts import contract
 from jsonschema import RefResolver
 from jsonschema.validators import validator_for
 
 from alfred import indent, format_iter
+from alfred_http.endpoints import ErrorResponseType
 from alfred_http.tests import HttpTestCase
-from alfred_rest.endpoints import JsonMessageType
+from alfred_rest.endpoints import JsonPayloadType
 from alfred_rest.tests.extension.extension import RestTestExtension
 
 
@@ -18,53 +19,57 @@ class RestTestCase(HttpTestCase):
 
     def request(self, endpoint_name: str, parameters: Optional[Dict] = None,
                 headers: Optional[Dict] = None):
-        # @todo Validate request data too. But the app under test validates requests already...
         response = super().request(endpoint_name, parameters, headers)
-        if 'Content-Type' in response.headers and 'json' in response.headers['Content-Type']:
-            endpoint = self._app.service(
-                'http', 'endpoints').get_endpoint(endpoint_name)
-            response_types = [endpoint.response_type] + \
-                self._app.service('http', 'error_response_types').get_types()
-            response_types = [
-                rm for rm in response_types if isinstance(rm, JsonMessageType)]
-            if not response_types:
-                raise AssertionError(
-                    'This request did not expect a JSON response.')
-            requirements = []
-            for response_meta in response_types:
-                try:
-                    schema_url = self._app.service(
-                        'http', 'urls').build('schema')
-                    response_schema_url = '%s#/definitions/response/%s' % (
-                        schema_url, response_meta.name)
-                    response_schema = self._get_schema(response_schema_url)
-                    json_validator = self._app.service(
-                        'rest', 'json_validator')
-                    json_validator.validate(response.json(), response_schema)
-                    requirements = []
-                    break
-                except Exception:
-                    requirements.append(
-                        indent(traceback.format_exc()))
 
-            requirements = set(requirements)
-            response_labels = format_iter(
-                list(map(lambda x: '"%s" (%s)' % (x.name, type(x)),
-                         response_types)))
-            message = [
-                'The response claims to contain JSON, but it cannot be validated against the JSON responses defined for this endpoint:\n%s\nOne of the following requirements must be met:' % response_labels]
-            if requirements:
-                for requirement in requirements:
-                    message.append("\n".join(
-                        map(lambda line: '    %s' % line,
-                            requirement.split("\n"))))
-                    message.append('OR')
-                message = message[:-1]
-                raise AssertionError("\n".join(message))
+        if 'Content-Type' not in response.headers or 'application/json' != \
+                response.headers['Content-Type']:
+            return response
+
+        endpoint = self._app.service(
+            'http', 'endpoints').get_endpoint(endpoint_name)
+        response_types = [endpoint.response_type, ErrorResponseType()]
+        response_types = filter(lambda rt: len(
+            list(filter(lambda pt: isinstance(pt, JsonPayloadType),
+                        rt.get_payload_types()))),
+            response_types)
+        if not response_types:
+            raise AssertionError(
+                'This request did not expect a JSON response.')
+
+        requirements = []
+        for response_type in response_types:
+            try:
+                schema_url = self._app.service(
+                    'http', 'urls').build('schema')
+                response_schema_url = '%s#/definitions/response/%s' % (
+                    schema_url, response_type.name)
+                response_schema = self._get_schema(response_schema_url)
+                json_validator = self._app.service('json', 'validator')
+                json_validator.validate(response.json(), response_schema)
+                requirements = []
+                break
+            except Exception:
+                requirements.append(
+                    indent(traceback.format_exc()))
+
+        requirements = set(requirements)
+        response_labels = format_iter(
+            list(map(lambda x: '"%s" (%s)' % (x.name, type(x)),
+                     response_types)))
+        message = [
+            'The response claims to contain JSON, but it cannot be validated against the JSON responses defined for this endpoint:\n%s\nOne of the following requirements must be met:' % response_labels]
+        if requirements:
+            for requirement in requirements:
+                message.append("\n".join(
+                    map(lambda line: '    %s' % line,
+                        requirement.split("\n"))))
+                message.append('OR')
+            message = message[:-1]
+            raise AssertionError("\n".join(message))
         return response
 
     @contract
-    def _get_schema(self, url: str) -> Dict:
+    def _get_schema(self, schema_id: str) -> Dict:
         """
         Gets a JSON Schema from a URL.
         :param url:
@@ -72,14 +77,10 @@ class RestTestCase(HttpTestCase):
         :raises requests.HTTPError
         :raises json.decoder.JSONDecodeError
         """
-        # @todo Replace this method with direct access to schemas through Python.
-        response = requests.get(url, headers={
-            'Accept': 'application/schema+json; q=1, application/json; q=0.9, text/json; q=0.8, text/x-json; q=0.7, */*',
-        })
-        response.raise_for_status()
-        schema = response.json()
-        if '#' in url:
-            url, schema = RefResolver.from_schema(schema).resolve(url)
+        url, fragment = urldefrag(schema_id)
+        schema = self._app.service('json', 'schemas').get_schema(url)
+        if fragment:
+            url, schema = RefResolver.from_schema(schema).resolve(schema_id)
             schema['id'] = url
         else:
             cls = validator_for(schema)
@@ -92,7 +93,7 @@ class RestTestCase(HttpTestCase):
         schema_url = self._app.service('http', 'urls').build('schema')
         response_schema_url = '%s#/definitions/response/error' % (schema_url,)
         response_schema = self._get_schema(response_schema_url)
-        json_validator = self._app.service('rest', 'json_validator')
+        json_validator = self._app.service('json', 'validator')
         json_validator.validate(data, response_schema)
         for error_code in error_codes:
             self._assertRestErrorResponseCode(error_code, data)

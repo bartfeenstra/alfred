@@ -1,6 +1,7 @@
 from jsonschema import validate
 
-from alfred_rest import base64_encodes, json_schema
+from alfred_http import base64_encodes
+from alfred_json import json_schema
 from alfred_rest.tests import RestTestCase
 
 
@@ -41,7 +42,7 @@ class ExternalJsonSchemaEndpointTest(RestTestCase):
         self.assertResponseContentType(content_type, response)
         actual_schema = response.json()
         expected_schema = self._app.service(
-            'rest', 'json_schema_rewriter').rewrite(json_schema())
+            'json', 'schema_rewriter').rewrite(json_schema())
         self.assertEquals(actual_schema, expected_schema)
 
     def testEndpointShouldHandleMissingSchema(self):
