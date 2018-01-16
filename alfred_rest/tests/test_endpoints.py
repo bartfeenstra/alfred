@@ -83,4 +83,4 @@ class GetResourceEndpointTest(RestTestCase):
         actual_ids = []
         for resource_data in data:
             actual_ids.append(resource_data['id'])
-        self.assertEqual(actual_ids, expected_ids)
+        self.assertCountEqual(actual_ids, expected_ids)
