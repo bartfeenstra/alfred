@@ -154,3 +154,23 @@ def dispatch(*args, **kwargs):
     :return: Callable
     """
     return lambda x: Dispatcher(x, *args, **kwargs)
+
+
+class classproperty:
+    @contract
+    def __init__(self, fget: Callable, doc=None):
+        self._fget = fget
+        if doc is None:
+            doc = fget.__doc__
+        self.__doc__ = doc
+
+    def __get__(self, instance, cls):
+        if cls is None:
+            cls = type(instance)
+        return self._fget(cls)
+
+    def __set__(self, instance, value):
+        raise AttributeError('Setting class properties is currently not supported.')
+
+    def __delete__(self, instance):
+        raise AttributeError('Deleting class properties is currently not supported.')
