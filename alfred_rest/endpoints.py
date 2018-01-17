@@ -9,13 +9,13 @@ from alfred_http.endpoints import Endpoint, EndpointRepository, \
     SuccessResponse, NonConfigurableGetRequestType, \
     NonConfigurableRequest, RequestType, Request, ErrorResponse, NotFoundError, \
     ResponseType, PayloadType, RequestPayloadType, ResponsePayloadType, \
-    RequestParameter, ErrorResponseType
+    RequestParameter, ErrorResponseType, EmptyResponseType
 from alfred_http.http import HttpRequest, HttpResponseBuilder, HttpBody
 from alfred_json.schema import SchemaNotFound
 from alfred_json.type import IdentifiableDataType, ListType, \
     IdentifiableScalarType, InputDataType, OutputDataType, OutputProcessorType
 from alfred_rest.resource import ResourceRepository, ResourceType, \
-    ResourceIdType, ResourceNotFound
+    ResourceIdType, ResourceNotFound, ShrinkableResourceRepository
 
 
 class JsonPayloadType(PayloadType):
@@ -333,8 +333,8 @@ class ResourceRequestPayloadType(RequestPayloadType):
 
 
 class ResourceRequestType(RequestType):
-    def __init__(self):
-        super().__init__('resource', 'GET', (ResourceRequestPayloadType(),))
+    def __init__(self, method='GET'):
+        super().__init__('resource', method, (ResourceRequestPayloadType(),))
 
     def get_parameters(self):
         return RequestParameter(ResourceIdType(), name='id'),
@@ -370,6 +370,25 @@ class GetResourceEndpoint(Endpoint):
             raise NotFoundError()
 
 
+class DeleteResourceEndpoint(Endpoint):
+    @contract
+    def __init__(self, resources: ShrinkableResourceRepository):
+        resource_name = resources.get_type().name
+        super().__init__('%s-delete' % resource_name, '/%ss/{id}' % resource_name,
+                         ResourceRequestType('DELETE'),
+                         EmptyResponseType())
+        self._resources = resources
+
+    def handle(self, request: Request):
+        assert isinstance(request, ResourceRequest)
+        try:
+            resource = self._resources.get_resource(request.id)
+        except ResourceNotFound:
+            raise NotFoundError()
+        self._resources.delete_resources((resource,))
+        return SuccessResponse()
+
+
 class ResourceEndpointRepository(EndpointRepository):
     """
     Provides endpoints for resource types.
@@ -401,5 +420,7 @@ class ResourceEndpointRepository(EndpointRepository):
             GetResourceEndpoint(resources),
             GetResourcesEndpoint(resources),
         ]
+        if isinstance(resources, ShrinkableResourceRepository):
+            endpoints.append(DeleteResourceEndpoint(resources))
 
         return endpoints

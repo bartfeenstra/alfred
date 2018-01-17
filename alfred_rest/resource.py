@@ -1,3 +1,4 @@
+import abc
 from typing import Iterable, Optional, Dict
 
 from contracts import contract, ContractsMeta, with_metaclass
@@ -39,40 +40,48 @@ class ResourceNotFound(RuntimeError):
 
 
 class ResourceRepository(with_metaclass(ContractsMeta)):
+    @abc.abstractmethod
     @contract
     def get_type(self) -> ResourceType:
         pass
 
+    @abc.abstractmethod
     @contract
     def get_resource(self, resource_id: str):
         pass
 
+    @abc.abstractmethod
     @contract
     def get_resources(self) -> Iterable:
         pass
 
 
 class ExpandableResourceRepository(ResourceRepository):
+    @abc.abstractmethod
     @contract
     def get_add_type(self) -> OutputDataType:
         pass
 
+    @abc.abstractmethod
     @contract
     def add_resources(self, resources: Iterable) -> Iterable:
         pass
 
 
 class ShrinkableResourceRepository(ResourceRepository):
+    @abc.abstractmethod
     @contract
     def delete_resources(self, resources: Iterable):
         pass
 
 
 class UpdateableResourceRepository(ResourceRepository):
+    @abc.abstractmethod
     @contract
     def get_update_type(self) -> OutputDataType:
         pass
 
+    @abc.abstractmethod
     @contract
     def update_resources(self, resources: Iterable) -> Iterable:
         pass

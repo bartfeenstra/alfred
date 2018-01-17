@@ -86,3 +86,19 @@ class GetResourcesEndpointTest(RestTestCase):
         for resource_data in data:
             actual_ids.append(resource_data['id'])
         self.assertCountEqual(actual_ids, expected_ids)
+
+
+class DeleteResourceEndpointTest(RestTestCase):
+    def testEndpointShouldDeleteResource(self):
+        resource_id = 'foo'
+        response = self.request('rest-test-delete', parameters={
+            'id': resource_id,
+        })
+        self.assertResponseStatus(200, response)
+
+    def testEndpointShouldNotFoundForUnknownResource(self):
+        resource_id = 'BAZ'
+        response = self.request('rest-test-delete', parameters={
+            'id': resource_id,
+        })
+        self.assertResponseStatus(404, response)
