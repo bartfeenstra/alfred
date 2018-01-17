@@ -1,7 +1,9 @@
+from typing import Iterable
+
 from contracts import contract
 
-from alfred_rest.resource import ResourceRepository, ResourceType, \
-    ResourceNotFound
+from alfred_rest.resource import ResourceType, ResourceNotFound, \
+    ShrinkableResourceRepository
 
 
 class RestTestResource:
@@ -25,7 +27,7 @@ class RestTestResourceType(ResourceType):
         }
 
 
-class RestTestResourceRepository(ResourceRepository):
+class RestTestResourceRepository(ShrinkableResourceRepository):
     def __init__(self):
         self._type = RestTestResourceType()
         resources = [
@@ -47,3 +49,7 @@ class RestTestResourceRepository(ResourceRepository):
 
     def get_resources(self):
         return self._resources.values()
+
+    def delete_resources(self, resources: Iterable):
+        # @todo Finish this.
+        pass
