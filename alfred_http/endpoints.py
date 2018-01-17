@@ -7,7 +7,7 @@ from flask import url_for
 
 from alfred import format_iter
 from alfred.app import App
-from alfred.dispatch import dispatch
+from alfred.functools import dispatch
 from alfred_http.http import HttpRequest, HttpResponse, HttpResponseBuilder
 from alfred_json.type import IdentifiableScalarType, InputDataType
 

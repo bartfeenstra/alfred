@@ -4,6 +4,7 @@ from typing import Iterable, Optional, Callable
 from contracts import contract, ContractsMeta, with_metaclass
 
 from alfred import indent, format_iter
+from alfred.functools import classproperty
 
 
 class ExtensionError(BaseException):
@@ -143,7 +144,31 @@ class Extension(with_metaclass(ContractsMeta)):
                 yield attribute.get_definition(self)
 
 
-class App:
+class AppMeta(type):
+
+    # The currently running App, or None if no App is running.
+    _current = None
+
+    @classproperty
+    def current(cls):
+        return cls._current
+
+    def __getattr__(self, item):
+        print('NEMAN')
+        print('NEMAN')
+        print('NEMAN')
+        print(item)
+        return super().__getattr__(item)
+
+    def __getattribute__(self, item):
+        print('OMAN')
+        print('OMAN')
+        print('OMAN')
+        print(item)
+        return super().__getattribute__(item)
+
+
+class App(metaclass=AppMeta):
     """
     Provides Alfred's core application.
 
@@ -159,9 +184,6 @@ class App:
     >>>     # Make the app do something.
     """
 
-    # The currently running App, or None if no App is running.
-    current = None
-
     def __init__(self):
         self._extensions = {}
         self._service_definitions = {}
@@ -176,18 +198,18 @@ class App:
         self.stop()
 
     def start(self):
-        if self.__class__.current is not None:
+        if self.__class__._current is not None:
             raise RuntimeError(
                 'Another instance of Alfred is already running.')
-        self.__class__.current = self
+        self.__class__._current = self
 
     def stop(self):
-        if self.__class__.current is None:
+        if self.__class__._current is None:
             return
-        if self.__class__.current is not self:
+        if self.__class__._current is not self:
             raise RuntimeError(
                 'Another instance of Alfred is already running, and it cannot be stopped through this instance.')
-        self.__class__.current = None
+        self.__class__._current = None
 
     @contract
     def _add_service(self, service_definition: ServiceDefinition):
@@ -213,6 +235,9 @@ class App:
 
     @contract
     def service(self, extension_name: str, service_name: str):
+        if self.__class__._current is not self:
+            raise RuntimeError('Alfred is not running yet. Call .start() first.')
+
         # Get the extension.
         try:
             extension_service_definitions = self._service_definitions[

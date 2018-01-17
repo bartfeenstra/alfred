@@ -4,7 +4,7 @@ from unittest import TestCase
 
 from contracts import contract
 
-from alfred.dispatch import dispatch
+from alfred.functools import dispatch, classproperty
 
 
 class SomeClass:
@@ -161,3 +161,26 @@ class InstanceMethodFactoryDispatchTest(TestCase):
         self.assertEquals(
             sut.results, ['foo', 'handler1'])
         self.assertEquals(sut._factoried, [self.SomeClass.handler1])
+
+
+class ClasspropertyTest(TestCase):
+    class FooMeta(type):
+        _bar = 'Bar'
+
+        @classproperty
+        def bar(cls):
+            return cls._bar
+
+    class Foo(metaclass=FooMeta):
+        pass
+
+    def testGet(self):
+        self.assertEquals(self.Foo.bar, 'Bar')
+
+    def testSet(self):
+        with self.assertRaises(AttributeError):
+            self.Foo.bar = 'Not bar'
+
+    def testDelete(self):
+        with self.assertRaises(AttributeError):
+            del self.Foo.bar
