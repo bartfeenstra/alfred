@@ -17,9 +17,10 @@ class RestTestCase(HttpTestCase):
     def get_extension_classes(self):
         return super().get_extension_classes() + [RestTestExtension]
 
-    def request(self, endpoint_name: str, parameters: Optional[Dict] = None,
+    def request(self, endpoint_name: str, body: Optional[str] = None,
+                parameters: Optional[Dict] = None,
                 headers: Optional[Dict] = None):
-        response = super().request(endpoint_name, parameters, headers)
+        response = super().request(endpoint_name, body, parameters, headers)
 
         if 'Content-Type' not in response.headers or 'application/json' != \
                 response.headers['Content-Type']:
@@ -30,8 +31,7 @@ class RestTestCase(HttpTestCase):
         response_types = [endpoint.response_type, ErrorResponseType()]
         response_types = filter(lambda rt: len(
             list(filter(lambda pt: isinstance(pt, JsonPayloadType),
-                        rt.get_payload_types()))),
-            response_types)
+                        rt.get_payload_types()))), response_types)
         if not response_types:
             raise AssertionError(
                 'This request did not expect a JSON response.')

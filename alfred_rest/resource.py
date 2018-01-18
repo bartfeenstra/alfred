@@ -1,30 +1,22 @@
 import abc
-from typing import Iterable, Optional, Dict
+from typing import Iterable, Optional, Dict, Union
 
 from contracts import contract, ContractsMeta, with_metaclass
 
 from alfred import format_iter
 from alfred_json.type import IdentifiableDataType, IdentifiableScalarType, \
-    OutputDataType
+    OutputDataType, InputDataType
 
 
 class ResourceIdType(IdentifiableScalarType):
     def __init__(self):
-        super().__init__({
+        super().__init__('resource-id')
+
+    def get_json_schema(self):
+        return {
             'title': 'A resource ID',
             'type': 'string',
-        }, 'resource-id')
-
-
-class ResourceType(IdentifiableDataType):
-    @contract
-    def __init__(self, schema: Dict, *args, **kwargs):
-        schema['type'] = 'object'
-        schema.setdefault('properties', {})
-        schema['properties']['id'] = ResourceIdType()
-        schema.setdefault('required', [])
-        schema['required'].append('id')
-        super().__init__(schema, *args, **kwargs)
+        }
 
 
 class ResourceNotFound(RuntimeError):
@@ -41,8 +33,7 @@ class ResourceNotFound(RuntimeError):
 
 class ResourceRepository(with_metaclass(ContractsMeta)):
     @abc.abstractmethod
-    @contract
-    def get_type(self) -> ResourceType:
+    def get_type(self) -> Union[OutputDataType, IdentifiableDataType]:
         pass
 
     @abc.abstractmethod
@@ -58,8 +49,7 @@ class ResourceRepository(with_metaclass(ContractsMeta)):
 
 class ExpandableResourceRepository(ResourceRepository):
     @abc.abstractmethod
-    @contract
-    def get_add_type(self) -> OutputDataType:
+    def get_add_type(self) -> Union[InputDataType, IdentifiableDataType]:
         pass
 
     @abc.abstractmethod
@@ -77,8 +67,7 @@ class ShrinkableResourceRepository(ResourceRepository):
 
 class UpdateableResourceRepository(ResourceRepository):
     @abc.abstractmethod
-    @contract
-    def get_update_type(self) -> OutputDataType:
+    def get_update_type(self) -> Union[InputDataType, IdentifiableDataType]:
         pass
 
     @abc.abstractmethod

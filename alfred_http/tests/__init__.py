@@ -43,7 +43,7 @@ class HttpTestCase(AppTestCase):
         self._flask_app_context.push()
 
         # Set up the app under test.
-        uwsgi = ['uwsgi', '--http-socket', '0.0.0.0:5000', '-p', '2',
+        uwsgi = ['uwsgi', '--http-socket', '0.0.0.0:5000',
                  '--manage-script-name', '--master', '--no-orphans', '--mount',
                  '/=alfred_http.flask.entry_point:app']
         if extensions:
@@ -63,7 +63,7 @@ class HttpTestCase(AppTestCase):
         self._uwsgi.send_signal(SIGINT)
         self._uwsgi.wait()
 
-    def request(self, endpoint_name: str,
+    def request(self, endpoint_name: str, body: Optional[str] = None,
                 parameters: Optional[Dict] = None,
                 headers: Optional[Dict] = None) -> HttpResponse:
         urls = self._app.service('http', 'urls')
@@ -73,6 +73,7 @@ class HttpTestCase(AppTestCase):
         assert isinstance(endpoint, Endpoint)
         # @todo Ensure we only pass query parameters to `requests`.
         response = getattr(requests, endpoint.request_type.method.lower())(url,
+                                                                           data=body,
                                                                            params=parameters,
                                                                            headers=headers)
 
