@@ -18,7 +18,7 @@ from alfred_json.type import IdentifiableDataType, ListType, \
     InputProcessorType
 from alfred_rest.resource import ResourceRepository, ResourceIdType, \
     ResourceNotFound, ShrinkableResourceRepository, \
-    ExpandableResourceRepository
+    ExpandableResourceRepository, UpdateableResourceRepository
 
 
 class JsonPayloadType(PayloadType):
@@ -427,6 +427,53 @@ class AddResourceEndpoint(Endpoint):
         return ResourceResponse(list(resources)[0])
 
 
+def build_replace_resource_request_type_class(resource_type: Union[InputDataType, IdentifiableDataType]):
+    class ReplaceResourceRequestType(RequestType):
+        _resource_type = resource_type
+        _type = InputProcessorType(
+            _resource_type, lambda x: ReplaceResourceRequest(x))
+
+        def __init__(self):
+            super().__init__('%s' % self._resource_type.name, 'PUT',
+                             (JsonRequestPayloadType(self._type),))
+
+        def get_parameters(self):
+            return RequestParameter(ResourceIdType(), name='id'),
+
+    return ReplaceResourceRequestType
+
+
+class ReplaceResourceRequest(Request):
+    def __init__(self, resource):
+        self._resource = resource
+
+    @property
+    def resource(self):
+        return self._resource
+
+
+class ReplaceResourceEndpoint(Endpoint):
+    @contract
+    def __init__(self, resources: UpdateableResourceRepository):
+        resource_name = resources.get_type().name
+        super().__init__('%s-replace' % resource_name, '/%ss' % resource_name,
+                         build_replace_resource_request_type_class(
+                             resources.get_update_type())(),
+                         build_resource_response_type_class(
+                             resources.get_type())())
+        self._resources = resources
+
+    def handle(self, request: Request):
+        assert isinstance(request, ReplaceResourceRequest)
+        resource = request.resource
+        # @todo How to handle validation?
+        try:
+            resources = self._resources.update_resources((resource,))
+        except ResourceNotFound as e:
+            raise NotFoundError(description=str(e))
+        return ResourceResponse(list(resources)[0])
+
+
 class DeleteResourceEndpoint(Endpoint):
     @contract
     def __init__(self, resources: ShrinkableResourceRepository):
@@ -480,6 +527,8 @@ class ResourceEndpointRepository(EndpointRepository):
         ]
         if isinstance(resources, ExpandableResourceRepository):
             endpoints.append(AddResourceEndpoint(resources))
+        if isinstance(resources, UpdateableResourceRepository):
+            endpoints.append(ReplaceResourceEndpoint(resources))
         if isinstance(resources, ShrinkableResourceRepository):
             endpoints.append(DeleteResourceEndpoint(resources))
 
