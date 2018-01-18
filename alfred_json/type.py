@@ -33,8 +33,7 @@ class InputProcessorType(InputDataType):
         return self._type.get_json_schema()
 
     def from_json(self, json_data):
-        self._type.from_json(self._processor(json_data))
-        pass
+        return self._processor(self._type.from_json(json_data))
 
 
 class OutputProcessorType(OutputDataType):
@@ -106,20 +105,16 @@ class ListType(InputDataType, OutputDataType):
         return list(map(self._item_type.to_json, data))
 
 
-class IdentifiableDataType(OutputDataType):
+class IdentifiableDataType(DataType):
     """
     These are JSON Schemas that provide metadata so they can be aggregated and
     re-used throughout a schema. See IdentifiableDataTypeAggregator.
     """
 
     @contract
-    def __init__(self, schema: Dict, name: str, group_name: str = 'data'):
+    def __init__(self, name: str, group_name: str = 'data'):
         self._group_name = group_name
         self._name = name
-        self._schema = schema
-
-    def get_json_schema(self):
-        return self._schema
 
     @property
     @contract

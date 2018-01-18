@@ -42,6 +42,13 @@ class Error(Exception):
         return self._http_response_status_code
 
 
+class BadRequestError(Error):
+    CODE = 'bad_request'
+
+    def __init__(self, **kwargs):
+        super().__init__(self.CODE, 'Bad request', 400, **kwargs)
+
+
 class NotFoundError(Error):
     CODE = 'not_found'
 
