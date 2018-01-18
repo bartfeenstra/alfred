@@ -489,7 +489,7 @@ class DeleteResourceEndpoint(Endpoint):
         try:
             resource = self._resources.get_resource(request.id)
         except ResourceNotFound:
-            raise NotFoundError()
+            return SuccessResponse()
         self._resources.delete_resources((resource,))
         return SuccessResponse()
 

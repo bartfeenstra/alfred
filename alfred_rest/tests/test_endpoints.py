@@ -238,9 +238,22 @@ class DeleteResourceEndpointTest(RestTestCase):
         })
         self.assertResponseStatus(200, response)
 
-    def testEndpointShouldNotFoundForUnknownResource(self):
+        # Confirm we can no longer retrieve the resource we just deleted.
+        response = self.request('rest-test', parameters={
+            'id': resource_id,
+        })
+        self.assertResponseStatus(404, response)
+
+        # Confirm the deletion is idempotent.
+        resource_id = 'foo'
+        response = self.request('rest-test-delete', parameters={
+            'id': resource_id,
+        })
+        self.assertResponseStatus(200, response)
+
+    def testEndpointShouldOKForUnknownResource(self):
         resource_id = 'BAZ'
         response = self.request('rest-test-delete', parameters={
             'id': resource_id,
         })
-        self.assertResponseStatus(404, response)
+        self.assertResponseStatus(200, response)
