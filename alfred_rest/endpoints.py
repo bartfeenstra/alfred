@@ -420,14 +420,13 @@ class AddResourceEndpoint(Endpoint):
         return ResourceResponse(list(resources)[0])
 
 
-def build_replace_resource_request_type_class(
-        resource_type: Union[InputDataType, IdentifiableDataType]):
+def build_replace_resource_request_type_class(resource_type: Union[InputDataType, IdentifiableDataType]):
     class ReplaceResourceRequestType(RequestType):
-        _type = resource_type
+        _resource_type = resource_type
 
         def __init__(self):
-            super().__init__('%s' % self._type.name, 'PUT',
-                             (JsonRequestPayloadType(self._type),))
+            super().__init__('%s' % self._resource_type.name, 'PUT',
+                             (JsonRequestPayloadType(self._resource_type),))
 
         def from_http_request(self, http_request: HttpRequest):
             return ReplaceResourceRequest(http_request.arguments['id'],
@@ -459,8 +458,7 @@ class ReplaceResourceEndpoint(Endpoint):
     @contract
     def __init__(self, resources: UpdateableResourceRepository):
         resource_name = resources.get_type().name
-        super().__init__('%s-replace' % resource_name,
-                         '/%ss/{id}' % resource_name,
+        super().__init__('%s-replace' % resource_name, '/%ss/{id}' % resource_name,
                          build_replace_resource_request_type_class(
                              resources.get_update_type())(),
                          build_resource_response_type_class(
