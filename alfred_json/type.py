@@ -1,5 +1,5 @@
 import abc
-from typing import Dict, Callable
+from typing import Dict
 
 from contracts import contract
 
@@ -21,32 +21,6 @@ class InputDataType(DataType):
     @abc.abstractmethod
     def from_json(self, json_data):
         pass
-
-
-class InputProcessorType(InputDataType):
-    @contract
-    def __init__(self, data_type: InputDataType, processor: Callable):
-        self._type = data_type
-        self._processor = processor
-
-    def get_json_schema(self):
-        return self._type.get_json_schema()
-
-    def from_json(self, json_data):
-        return self._processor(self._type.from_json(json_data))
-
-
-class OutputProcessorType(OutputDataType):
-    @contract
-    def __init__(self, data_type: OutputDataType, processor: Callable):
-        self._type = data_type
-        self._processor = processor
-
-    def get_json_schema(self):
-        return self._type.get_json_schema()
-
-    def to_json(self, data):
-        return self._type.to_json(self._processor(data))
 
 
 class ScalarType(OutputDataType, InputDataType):

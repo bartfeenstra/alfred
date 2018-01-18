@@ -230,6 +230,97 @@ class ReplaceResourceEndpointTest(RestTestCase):
         self.assertResponseStatus(404, response)
 
 
+class AlterResourceEndpointTest(RestTestCase):
+    def testEndpointShouldAlterResource(self):
+        resource_id = 'foo'
+        resource_label = 'QuX'
+        body = json.dumps([
+            {
+                'op': 'replace',
+                'path': '/label',
+                'value': resource_label,
+            },
+        ])
+        response = self.request('rest-test-alter', parameters={
+            'id': resource_id,
+        }, body=body, headers={
+            'Content-Type': 'application/json-patch+json',
+            'Accept': 'application/json',
+        })
+        self.assertResponseStatus(200, response)
+        data = response.json()
+        self.assertEqual(data['id'], resource_id)
+        self.assertEqual(data['label'], resource_label)
+
+        # Confirm we can retrieve the resource we just altered.
+        response = self.request('rest-test', parameters={
+            'id': resource_id,
+        })
+        self.assertResponseStatus(200, response)
+        data = response.json()
+        self.assertEqual(data['id'], resource_id)
+        self.assertEqual(data['label'], resource_label)
+
+    def testEndpointShouldBadRequestForInvalidResource(self):
+        resource_id = 'foo'
+        body = json.dumps({})
+        response = self.request('rest-test-alter', parameters={
+            'id': resource_id,
+        }, body=body, headers={
+            'Content-Type': 'application/json-patch+json',
+            'Accept': 'application/json',
+        })
+        self.assertResponseStatus(400, response)
+
+    def testEndpointShouldUnsupportedMediaTypeForInvalidContentType(self):
+        resource_id = 'foo'
+        resource_label = 'QuX'
+        body = '%s (%s)' % (resource_label, resource_id)
+        response = self.request('rest-test-alter', parameters={
+            'id': resource_id,
+        }, body=body, headers={
+            'Content-Type': 'text/plain',
+            'Accept': 'application/json',
+        })
+        self.assertResponseStatus(415, response)
+
+    def testEndpointShouldNotAcceptableForInvalidAccept(self):
+        resource_id = 'foo'
+        resource_label = 'QuX'
+        body = json.dumps([
+            {
+                'op': 'replace',
+                'path': '/label',
+                'value': resource_label,
+            },
+        ])
+        response = self.request('rest-test-alter', parameters={
+            'id': resource_id,
+        }, body=body, headers={
+            'Content-Type': 'application/json-patch+json',
+            'Accept': 'application/octet-stream',
+        })
+        self.assertResponseStatus(406, response)
+
+    def testEndpointShouldNotFoundForUnknownResource(self):
+        resource_id = 'BAZ'
+        resource_label = 'QuX'
+        body = json.dumps([
+            {
+                'op': 'replace',
+                'path': '/label',
+                'value': resource_label,
+            },
+        ])
+        response = self.request('rest-test-alter', parameters={
+            'id': resource_id,
+        }, body=body, headers={
+            'Content-Type': 'application/json-patch+json',
+            'Accept': 'application/json',
+        })
+        self.assertResponseStatus(404, response)
+
+
 class DeleteResourceEndpointTest(RestTestCase):
     def testEndpointShouldDeleteResource(self):
         resource_id = 'foo'

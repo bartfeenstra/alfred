@@ -69,7 +69,7 @@ class AddRestTestResourceType(IdentifiableDataType, InputDataType):
         return RestTestResource(json_data['id'], label)
 
 
-class UpdateRestTestResourceType(IdentifiableDataType, InputDataType):
+class UpdateRestTestResourceType(IdentifiableDataType, InputDataType, OutputDataType):
     def __init__(self):
         super().__init__('rest-test-update')
 
@@ -88,6 +88,12 @@ class UpdateRestTestResourceType(IdentifiableDataType, InputDataType):
     def from_json(self, json_data):
         label = json_data['label'] if 'label' in json_data else ''
         return RestTestResource(json_data['id'], label)
+
+    def to_json(self, data):
+        return {
+            'id': data.id,
+            'label': data.label,
+        }
 
 
 class RestTestResourceRepository(ShrinkableResourceRepository,
