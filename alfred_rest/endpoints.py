@@ -286,27 +286,27 @@ class ResourcesResponse(SuccessResponse, PayloadedMessage):
         return self._resources
 
 
+def build_resources_response_type_class(
+        resource_type: Union[OutputDataType, IdentifiableDataType]):
+    class ResourcesResponseType(ResponseType):
+        _resource_type = resource_type
+        _type = ListType(resource_type)
+
+        def __init__(self):
+            super().__init__('%ss' % self._resource_type.name,
+                             (JsonResponsePayloadType(self._type),))
+
+    return ResourcesResponseType
+
+
 class GetResourcesEndpoint(Endpoint):
-    @staticmethod
-    def _build_response_type_class(
-            resource_type: Union[OutputDataType, IdentifiableDataType]):
-        class ResourcesResponseType(ResponseType):
-            _resource_type = resource_type
-            _type = ListType(resource_type)
-
-            def __init__(self):
-                super().__init__('%ss' % self._resource_type.name,
-                                 (JsonResponsePayloadType(self._type),))
-
-        return ResourcesResponseType
-
     @contract
     def __init__(self, resources: ResourceRepository):
         resource_name = resources.get_type().name
         super().__init__('%ss' % resource_name,
                          '/%ss' % resource_name,
                          NonConfigurableGetRequestType(),
-                         self._build_response_type_class(
+                         build_resources_response_type_class(
                              resources.get_type())())
         self._resources = resources
 
@@ -420,7 +420,8 @@ class AddResourceEndpoint(Endpoint):
         return ResourceResponse(list(resources)[0])
 
 
-def build_replace_resource_request_type_class(resource_type: Union[InputDataType, IdentifiableDataType]):
+def build_replace_resource_request_type_class(
+        resource_type: Union[InputDataType, IdentifiableDataType]):
     class ReplaceResourceRequestType(RequestType):
         _resource_type = resource_type
 
@@ -458,7 +459,8 @@ class ReplaceResourceEndpoint(Endpoint):
     @contract
     def __init__(self, resources: UpdateableResourceRepository):
         resource_name = resources.get_type().name
-        super().__init__('%s-replace' % resource_name, '/%ss/{id}' % resource_name,
+        super().__init__('%s-replace' % resource_name,
+                         '/%ss/{id}' % resource_name,
                          build_replace_resource_request_type_class(
                              resources.get_update_type())(),
                          build_resource_response_type_class(
@@ -523,7 +525,7 @@ class AlterResourceRequest(Request, PayloadedMessage):
 class AlterResourceRequestType(RequestType):
     @contract
     def __init__(self, resource_type_name: str):
-        super().__init__('%s' % resource_type_name, 'PATCH',
+        super().__init__('%s-alter' % resource_type_name, 'PATCH',
                          (JsonPatchRequestPayloadType(),))
 
     def get_parameters(self):
@@ -569,6 +571,57 @@ class AlterResourceEndpoint(Endpoint):
         except ResourceNotFound as e:
             raise NotFoundError(description=str(e))
         return ResourceResponse(list(resources)[0])
+
+
+class AlterResourcesRequest(Request, PayloadedMessage):
+    @contract
+    def __init__(self, patch: JsonPatch):
+        self._patch = patch
+
+    @property
+    def payload(self):
+        return self._patch
+
+
+class AlterResourcesRequestType(RequestType):
+    @contract
+    def __init__(self, resource_type_name: str):
+        super().__init__('%ss-alter' % resource_type_name, 'PATCH',
+                         (JsonPatchRequestPayloadType(),))
+
+    def from_http_request(self, http_request: HttpRequest):
+        return AlterResourcesRequest(
+            self._from_http_request_payload(http_request.body))
+
+
+class AlterResourcesEndpoint(Endpoint):
+    @contract
+    def __init__(self, resources: UpdateableResourceRepository):
+        resource_type = resources.get_type()
+        # We can only patch resources automatically if the update data type
+        # can serialize as well as deserialize.
+        assert isinstance(resource_type, OutputDataType)
+        resource_name = resource_type.name
+        super().__init__('%ss-alter' % resource_name,
+                         '/%ss' % resource_name,
+                         AlterResourcesRequestType(resource_type.name),
+                         build_resources_response_type_class(
+                             resource_type)())
+        self._resources = resources
+
+    def handle(self, request: Request):
+        assert isinstance(request, AlterResourcesRequest)
+        resource_type = self._resources.get_update_type()
+        patch = request.payload
+        resources = self._resources.get_resources()
+        updated_resources = []
+        for resource in resources:
+            resource_data = resource_type.to_json(resource)
+            resource_data = patch.apply(resource_data)
+            updated_resources.append(resource_type.from_json(resource_data))
+        # @todo How to handle validation?
+        updated_resources = self._resources.update_resources(updated_resources)
+        return ResourcesResponse(updated_resources)
 
 
 class DeleteResourceEndpoint(Endpoint):
@@ -628,6 +681,7 @@ class ResourceEndpointRepository(EndpointRepository):
             endpoints.append(ReplaceResourceEndpoint(resources))
             if isinstance(resources.get_update_type(), OutputDataType):
                 endpoints.append(AlterResourceEndpoint(resources))
+                endpoints.append(AlterResourcesEndpoint(resources))
         if isinstance(resources, ShrinkableResourceRepository):
             endpoints.append(DeleteResourceEndpoint(resources))
 
