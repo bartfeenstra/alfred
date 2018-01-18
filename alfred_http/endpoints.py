@@ -1,6 +1,6 @@
 import abc
 from copy import copy
-from typing import Iterable, Optional, Dict
+from typing import Iterable, Optional, Dict, Any
 
 from contracts import contract, ContractsMeta, with_metaclass
 from flask import url_for
@@ -8,7 +8,8 @@ from flask import url_for
 from alfred import format_iter
 from alfred.app import App
 from alfred.dispatch import dispatch
-from alfred_http.http import HttpRequest, HttpResponse, HttpResponseBuilder
+from alfred_http.http import HttpRequest, HttpResponse, HttpBody, \
+    HttpResponseBuilder
 from alfred_json.type import IdentifiableScalarType, InputDataType
 
 
@@ -99,6 +100,13 @@ class Message(with_metaclass(ContractsMeta)):
     pass
 
 
+class PayloadedMessage(Message):
+    @property
+    @abc.abstractmethod
+    def payload(self) -> Any:
+        pass
+
+
 class PayloadType(with_metaclass(ContractsMeta)):
     @abc.abstractmethod
     def get_content_types(self) -> Iterable[str]:
@@ -160,13 +168,13 @@ class RequestParameter:
 class RequestPayloadType(PayloadType):
     @abc.abstractmethod
     @contract
-    def from_http_request(self, http_request: HttpRequest) -> Request:
+    def from_http_request_body(self, http_request_body: HttpBody):
         """
-        Converts an HTTP request to an API request.
+        Converts an HTTP request body to an API request payload.
 
         The HTTP request MUST be valid for this request. If it is not,
         developer-facing exceptions may be raised.
-        :param http_request:
+        :param http_request_body:
         :return:
         """
         pass
@@ -175,14 +183,15 @@ class RequestPayloadType(PayloadType):
 class RequestType(MessageType):
     _allowed_methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
 
-    @contract
-    def __init__(self, name: str, method: str, payload_types: Iterable):
+    def __init__(self, name: str, method: str,
+                 payload_types: Optional[Iterable] = None):
         super().__init__(name)
         method = method.upper()
         assert method in self._allowed_methods
         self._method = method
-        self._payload_types = payload_types
+        self._payload_types = payload_types if payload_types is not None else ()
 
+    @abc.abstractmethod
     @contract
     def from_http_request(self, http_request: HttpRequest) -> Request:
         """
@@ -190,16 +199,24 @@ class RequestType(MessageType):
 
         The HTTP request SHOULD be valid for this request. If it is not,
         exceptions may be raised.
+
+        See self._from_http_request_payload() to build the request's payload.
         :param http_request:
         :return:
         """
-        content_type = http_request.body.content_type if http_request.body else ''
+
+    def _from_http_request_payload(self, body: HttpBody):
+        if not self._payload_types:
+            return None
+
+        content_type = body.content_type if body else ''
         for payload_type in self._payload_types:
             if content_type in payload_type.get_content_types():
-                return payload_type.from_http_request(http_request)
+                return payload_type.from_http_request_body(body)
 
-        raise UnsupportedMediaTypeError(description='Could not parse the "%s" HTTP payload for request "%s"' % (
-            content_type, self.name))
+        raise UnsupportedMediaTypeError(
+            description='Could not consume the "%s" HTTP payload for request "%s"' % (
+                content_type, self.name))
 
     @property
     def method(self) -> str:
@@ -276,11 +293,10 @@ class Response(Message):
 class ResponsePayloadType(PayloadType):
     @abc.abstractmethod
     @contract
-    def to_http_response(self, response: Response,
-                         content_type: str) -> HttpResponseBuilder:
+    def to_http_response_body(self, payload, content_type: str) -> HttpBody:
         """
-        Converts an API response to an HTTP response.
-        :param response: Response
+        Converts an API response to an HTTP response body.
+        :param payload: Response
         :return: HttpBody
         """
         pass
@@ -307,18 +323,23 @@ class ResponseType(MessageType):
         :param response:
         :return:
         """
-        http_response = None
-        for payload_type in self._payload_types:
-            if content_type in payload_type.get_content_types():
-                http_response = payload_type.to_http_response(
-                    response, content_type)
-                break
-        if not http_response:
-            raise RuntimeError(
-                'Could not build a "%s" HTTP body for response "%s"' % (
-                    content_type, self.name))
+        http_response = HttpResponseBuilder()
+        if isinstance(response, PayloadedMessage):
+            http_response.body = self._to_http_response_payload(
+                response.payload, content_type)
         http_response.status = response.http_response_status_code
         return http_response.to_response()
+
+    @contract
+    def _to_http_response_payload(self, payload,
+                                  content_type: str) -> HttpBody:
+        for payload_type in self._payload_types:
+            if content_type in payload_type.get_content_types():
+                return payload_type.to_http_response_body(payload,
+                                                          content_type)
+        raise RuntimeError(
+            'Could not produce a "%s" HTTP body for response "%s"' % (
+                content_type, self.name))
 
 
 class SuccessResponse(Response):
@@ -327,7 +348,7 @@ class SuccessResponse(Response):
         return 200
 
 
-class ErrorResponse(Response):
+class ErrorResponse(Response, PayloadedMessage):
     def __init__(self):
         self._errors = []
 
@@ -337,7 +358,7 @@ class ErrorResponse(Response):
         return message
 
     @property
-    def errors(self) -> Iterable:
+    def payload(self):
         return self._errors
 
     @property
@@ -355,15 +376,12 @@ class ErrorResponseType(ResponseType):
             tag='error_response_payload_type'))
 
 
-class EmptyPayloadType(RequestPayloadType, ResponsePayloadType):
+class EmptyPayloadType(ResponsePayloadType):
     def get_content_types(self):
         return '',
 
-    def from_http_request(self, http_request: HttpRequest):
-        return NonConfigurableRequest()
-
-    def to_http_response(self, response, content_type):
-        return HttpResponseBuilder()
+    def to_http_response_body(self, payload, content_type):
+        return HttpBody('', '')
 
 
 class EmptyResponseType(ResponseType):

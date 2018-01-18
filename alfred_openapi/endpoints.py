@@ -4,28 +4,28 @@ from jinja2 import Template
 
 from alfred.app import App
 from alfred_http.endpoints import Endpoint, NonConfigurableGetRequestType, \
-    SuccessResponse, ResponseType, ResponsePayloadType
-from alfred_http.http import HttpBody, HttpResponseBuilder
+    SuccessResponse, ResponseType, ResponsePayloadType, PayloadedMessage
+from alfred_http.http import HttpBody
 from alfred_json.type import OutputDataType
 from alfred_openapi import RESOURCE_PATH
 from alfred_rest.endpoints import JsonResponsePayloadType
 
 
-class OpenApiResponse(SuccessResponse):
+class OpenApiResponse(SuccessResponse, PayloadedMessage):
     @contract
     def __init__(self, spec: APISpec):
         super().__init__()
         self._spec = spec
 
     @property
-    def spec(self) -> APISpec:
+    def payload(self):
         return self._spec
 
 
 class OpenApiSpecificationType(OutputDataType):
     def to_json(self, data):
-        assert isinstance(data, OpenApiResponse)
-        return data.spec.to_dict()
+        assert isinstance(data, APISpec)
+        return data.to_dict()
 
     def get_json_schema(self):
         return {
@@ -40,14 +40,11 @@ class ReDocResponsePayloadType(ResponsePayloadType):
     def get_content_types(self):
         return ['text/html']
 
-    def to_http_response(self, response, content_type):
-        http_response = HttpResponseBuilder()
+    def to_http_response_body(self, payload, content_type):
         template = Template(
             open(RESOURCE_PATH + '/templates/redoc.html.j2').read())
         spec_url = self._urls.build('openapi')
-        http_response.body = HttpBody(template.render(spec_url=spec_url),
-                                      content_type)
-        return http_response
+        return HttpBody(template.render(spec_url=spec_url), content_type)
 
 
 class OpenApiResponseType(ResponseType):
