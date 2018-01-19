@@ -28,12 +28,17 @@ class IdentifiableDataTypeAggregatorTest(TestCase):
         self.assertEqual(original_schema, rewritten_schema)
 
     def testRewriteSimpleDataType(self):
-        sut = IdentifiableDataTypeAggregator()
+        class FooDataType(IdentifiableDataType):
+            def __init__(self):
+                super().__init__('Foo')
+
+            def get_json_schema(self):
+                return {
+                    'type': 'float',
+                }
         original_schema = {
             'id': 'https://example.com/schema',
-            'foo': IdentifiableDataType({
-                'type': 'float',
-            }, 'Foo'),
+            'foo': FooDataType(),
         }
         expected_schema = {
             'id': 'https://example.com/schema',
@@ -48,22 +53,35 @@ class IdentifiableDataTypeAggregatorTest(TestCase):
                 },
             },
         }
+        sut = IdentifiableDataTypeAggregator()
         rewritten_schema = sut.rewrite(original_schema)
         self.assertEqual(rewritten_schema, expected_schema)
 
     def testRewriteNestedDataTypes(self):
-        sut = IdentifiableDataTypeAggregator()
+        class FooDataType(IdentifiableDataType):
+            def __init__(self):
+                super().__init__('Foo')
+
+            def get_json_schema(self):
+                return {
+                    'type': 'float',
+                }
+
+        class BazDataType(IdentifiableDataType):
+            def __init__(self):
+                super().__init__('Baz')
+
+            def get_json_schema(self):
+                return {
+                    'type': 'string',
+                }
         original_schema = {
             'id': 'https://example.com/schema',
-            'foo': IdentifiableDataType({
-                'type': 'float',
-            }, 'Foo'),
+            'foo': FooDataType(),
             'bar': {
                 'type': 'object',
                 'properties': {
-                    'baz': IdentifiableDataType({
-                        'type': 'string',
-                    }, 'Baz'),
+                    'baz': BazDataType(),
                 },
             },
         }
@@ -91,14 +109,20 @@ class IdentifiableDataTypeAggregatorTest(TestCase):
                 },
             },
         }
+        sut = IdentifiableDataTypeAggregator()
         rewritten_schema = sut.rewrite(original_schema)
         self.assertEqual(rewritten_schema, expected_schema)
 
     def testRewriteDuplicateDataTypes(self):
-        sut = IdentifiableDataTypeAggregator()
-        data_type = IdentifiableDataType({
-            'type': 'float',
-        }, 'Foo')
+        class FooDataType(IdentifiableDataType):
+            def __init__(self):
+                super().__init__('Foo')
+
+            def get_json_schema(self):
+                return {
+                    'type': 'float',
+                }
+        data_type = FooDataType()
         original_schema = {
             'id': 'https://example.com/schema',
             'foo': data_type,
@@ -120,22 +144,43 @@ class IdentifiableDataTypeAggregatorTest(TestCase):
                 },
             },
         }
+        sut = IdentifiableDataTypeAggregator()
         rewritten_schema = sut.rewrite(original_schema)
         self.assertEqual(rewritten_schema, expected_schema)
 
     def testRewriteExistingDefinition(self):
-        sut = IdentifiableDataTypeAggregator()
-        data_type_foo = IdentifiableDataType({
-            'type': 'float',
-        }, 'Foo')
-        data_type_bar = IdentifiableDataType({
-            'type': 'array',
-            'items': data_type_foo,
-        }, 'Bar')
-        data_type_baz = IdentifiableDataType({
-            'type': 'array',
-            'items': data_type_bar,
-        }, 'Baz')
+        class FooDataType(IdentifiableDataType):
+            def __init__(self):
+                super().__init__('Foo')
+
+            def get_json_schema(self):
+                return {
+                    'type': 'float',
+                }
+        data_type_foo = FooDataType()
+
+        class BarDataType(IdentifiableDataType):
+            def __init__(self):
+                super().__init__('Bar')
+
+            def get_json_schema(self):
+                return {
+                    'type': 'array',
+                    'items': data_type_foo,
+                }
+        data_type_bar = BarDataType()
+
+        class BazDataType(IdentifiableDataType):
+            def __init__(self):
+                super().__init__('Baz')
+
+            def get_json_schema(self):
+                return {
+                    'type': 'array',
+                    'items': data_type_bar,
+                }
+        data_type_baz = BazDataType()
+
         original_schema = {
             'id': 'https://example.com/schema',
             'definitions': {
@@ -167,6 +212,7 @@ class IdentifiableDataTypeAggregatorTest(TestCase):
                 },
             },
         }
+        sut = IdentifiableDataTypeAggregator()
         rewritten_schema = sut.rewrite(original_schema)
         self.assertEqual(rewritten_schema, expected_schema)
 

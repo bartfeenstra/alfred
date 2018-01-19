@@ -1,15 +1,16 @@
-from typing import List, Dict
+from typing import List, Dict, Iterable
 from urllib.parse import urlparse
 
 from contracts import contract
 from flask import Flask, request as current_http_request, \
     Response as FlaskHttpResponse
 from flask.views import MethodView
+from werkzeug.datastructures import MIMEAccept
 
 from alfred.app import App
 from alfred_http.endpoints import Error, \
     ErrorResponse, Endpoint, Request, NotAcceptableError, \
-    UnsupportedMediaTypeError, ResponseType, ErrorResponseType
+    ResponseType, ErrorResponseType
 from alfred_http.http import HttpRequest, HttpBody, HttpResponse
 
 
@@ -29,29 +30,25 @@ def flask_to_alfred_http_request(flask_http_request, endpoint: Endpoint,
     request_body_data = flask_http_request.get_data().decode(
         charset)
     request_body = HttpBody(request_body_data, current_http_request.mimetype)
-    request_parameters = {}
-    for request_parameter in endpoint.request_type.get_parameters():
-        request_parameters[
-            request_parameter.name] = request_parameter
-    request_arguments = {}
 
-    # Add query arguments.
-    for query_name in flask_http_request.args:
-        if query_name in request_parameters:
-            query_value = flask_http_request.args.get(query_name)
+    request_arguments = {}
+    for parameter in endpoint.request_type.get_parameters():
+        # Add URL path arguments.
+        if parameter.required:
+            request_arguments[parameter.name] = kwargs[parameter.name]
+
+        # Add query arguments.
+        else:
+            query_value = flask_http_request.args.get(parameter.name)
             query_values = flask_http_request.args.getlist(
-                query_name)
+                parameter.name)
             # Use a single value, if it's expected and encountered.
-            if request_parameters[query_name].cardinality == 1 and [query_value] == query_values:
-                request_arguments[query_name] = query_value
+            if parameter.cardinality == 1 and [query_value] == query_values:
+                request_arguments[parameter.name] = query_value
             # In all other cases, pass on a list of the values.
             else:
-                request_arguments[query_name] = query_values
+                request_arguments[parameter.name] = query_values
 
-    # Add URL path arguments.
-    for kwarg_name, kwarg_value in kwargs.items():
-        if kwarg_name in request_parameters:
-            request_arguments[kwarg_name] = kwarg_value
     alfred_http_request = HttpRequest(body=request_body,
                                       arguments=request_arguments,
                                       headers=dict(
@@ -75,17 +72,29 @@ def alfred_to_flask_http_response(
 
 
 @contract
-def validate_accept(response_type: ResponseType):
-    accepted_content_types = []
+def validate_accept_for_response_type(response_type: ResponseType,
+                                      accept_headers: MIMEAccept):
+    produced_content_types = []
     for payload_type in response_type.get_payload_types():
-        # Flask does not like empty content types, but we use them.
-        accepted_content_types += list(filter(lambda x: x !=
-                                              '', payload_type.get_content_types()))
-    content_type = current_http_request.accept_mimetypes.best_match(
-        accepted_content_types)
+        produced_content_types += payload_type.get_content_types()
+    return validate_accept(produced_content_types, accept_headers)
+
+
+@contract
+def validate_accept(produced_content_types: Iterable,
+                    accept_headers: MIMEAccept):
+    if not len(accept_headers):
+        accept_headers = MIMEAccept([('*/*', 1)])
+
+    # Flask does not like empty content types, but we use them.
+    content_type = accept_headers.best_match(
+        filter(lambda x: x != '', produced_content_types))
     if content_type is None:
+        if '*/*' in accept_headers and '' in produced_content_types:
+            return ''
         raise NotAcceptableError(
-            description='This endpoint only returns one of the following content types: %s' % ', '.join(accepted_content_types))
+            description='This endpoint only returns one of the following content types: %s' % ', '.join(
+                produced_content_types))
     return content_type
 
 
@@ -114,10 +123,12 @@ class FlaskApp(Flask):
         for path, endpoints in route_endpoints.items():
             route_name = path
             path = path.replace('{', '<').replace('}', '>')
+            methods = list(map(lambda x: x.request_type.method, endpoints))
             self.add_url_rule(path, endpoint=route_name,
                               view_func=EndpointView.as_view(endpoints[0].path,
                                                              self._app,
-                                                             endpoints))
+                                                             endpoints),
+                              methods=methods)
 
 
 class EndpointView(MethodView):
@@ -132,15 +143,9 @@ class EndpointView(MethodView):
     def _build_view(app: App, endpoint: Endpoint):
         def _view(**kwargs):
             try:
-                content_type = validate_accept(endpoint.response_type)
-
-                # Check the request consumes the provided content type.
-                supported_media_types = []
-                for payload_type in endpoint.request_type.get_payload_types():
-                    for supported_media_type in payload_type.get_content_types():
-                        supported_media_types.append(supported_media_type)
-                if current_http_request.mimetype not in supported_media_types:
-                    raise UnsupportedMediaTypeError()
+                content_type = validate_accept_for_response_type(
+                    endpoint.response_type,
+                    current_http_request.accept_mimetypes)
 
                 alfred_http_request = flask_to_alfred_http_request(
                     current_http_request, endpoint, kwargs)
@@ -155,9 +160,7 @@ class EndpointView(MethodView):
 
                 # Build the Alfred HTTP response.
                 alfred_http_response = endpoint.response_type.to_http_response(
-                    alfred_response,
-                    content_type)
-                assert isinstance(alfred_http_response, HttpResponse)
+                    alfred_response, content_type)
 
                 return alfred_to_flask_http_response(alfred_http_response)
 
@@ -167,7 +170,9 @@ class EndpointView(MethodView):
                 error_response_type = ErrorResponseType()
 
                 try:
-                    content_type = validate_accept(error_response_type)
+                    content_type = validate_accept_for_response_type(
+                        error_response_type,
+                        current_http_request.accept_mimetypes)
                 except NotAcceptableError:
                     # We know there is a payload type that outputs no content.
                     content_type = ''

@@ -1,21 +1,27 @@
 import json
-from typing import Dict, Iterable
+from json import JSONDecodeError
+from typing import Dict, Iterable, Union
 
 from contracts import contract
+from jsonpatch import JsonPatch
+from jsonschema import ValidationError
 
 from alfred.app import App
 from alfred_http import base64_decodes
 from alfred_http.endpoints import Endpoint, EndpointRepository, \
     SuccessResponse, NonConfigurableGetRequestType, \
-    NonConfigurableRequest, RequestType, Request, ErrorResponse, NotFoundError, \
+    NonConfigurableRequest, RequestType, Request, NotFoundError, \
     ResponseType, PayloadType, RequestPayloadType, ResponsePayloadType, \
-    RequestParameter, ErrorResponseType
-from alfred_http.http import HttpRequest, HttpResponseBuilder, HttpBody
+    RequestParameter, ErrorResponseType, EmptyResponseType, BadRequestError, \
+    PayloadedMessage
+from alfred_http.http import HttpRequest, HttpBody
+from alfred_json import RESOURCE_PATH
 from alfred_json.schema import SchemaNotFound
 from alfred_json.type import IdentifiableDataType, ListType, \
-    IdentifiableScalarType, InputDataType, OutputDataType, OutputProcessorType
-from alfred_rest.resource import ResourceRepository, ResourceType, \
-    ResourceIdType, ResourceNotFound
+    IdentifiableScalarType, InputDataType, OutputDataType
+from alfred_rest.resource import ResourceRepository, ResourceIdType, \
+    ResourceNotFound, ShrinkableResourceRepository, \
+    ExpandableResourceRepository, UpdateableResourceRepository
 
 
 class JsonPayloadType(PayloadType):
@@ -34,13 +40,17 @@ class JsonRequestPayloadType(JsonPayloadType, RequestPayloadType):
     def data_type(self) -> InputDataType:
         return self._data_type
 
-    def from_http_request(self, http_request):
-        # return self._data_type.from_json()
-        # self._validator.validate(json_data, self.data_type.get_json_schema())
-        # @todo Can we use InputProcessorType to simply turn any data structure into a response object quickly?
-        # @todo
-        # @todo
-        pass
+    def from_http_request_body(self, http_request_body):
+        try:
+            json_data = json.loads(http_request_body.content)
+        except JSONDecodeError as e:
+            raise BadRequestError(description=str(e))
+        try:
+            self._validator.validate(
+                json_data, self._data_type.get_json_schema())
+        except ValidationError as e:
+            raise BadRequestError(description=str(e))
+        return self._data_type.from_json(json_data)
 
 
 class JsonResponsePayloadType(JsonPayloadType, ResponsePayloadType):
@@ -53,16 +63,17 @@ class JsonResponsePayloadType(JsonPayloadType, ResponsePayloadType):
     def data_type(self) -> OutputDataType:
         return self._data_type
 
-    def to_http_response(self, response, content_type):
-        json_data = self._data_type.to_json(response)
-        http_response = HttpResponseBuilder()
-        http_response.body = HttpBody(json.dumps(json_data), content_type)
-        return http_response
+    def to_http_response_body(self, payload, content_type):
+        json_data = self._data_type.to_json(payload)
+        return HttpBody(json.dumps(json_data), content_type)
 
 
-class ErrorType(IdentifiableDataType):
+class ErrorType(IdentifiableDataType, OutputDataType):
     def __init__(self):
-        super().__init__({
+        super().__init__('error')
+
+    def get_json_schema(self):
+        return {
             'title': 'An API error',
             'type': 'object',
             'properties': {
@@ -80,7 +91,7 @@ class ErrorType(IdentifiableDataType):
                 },
             },
             'required': ['code', 'title'],
-        }, 'error')
+        }
 
     def to_json(self, data):
         return {
@@ -90,22 +101,24 @@ class ErrorType(IdentifiableDataType):
 
 
 class ErrorPayloadType(JsonResponsePayloadType):
-    class ErrorResponseType(IdentifiableDataType):
+    class ErrorResponseType(IdentifiableDataType, OutputDataType):
         def __init__(self):
             self._data_type = ListType(ErrorType())
-            super().__init__({
+            super().__init__('error')
+
+        def get_json_schema(self):
+            return {
                 'title': 'Error response',
                 'type': 'object',
                 'properties': {
                     'errors': self._data_type,
                 },
                 'required': ['errors'],
-            }, 'error')
+            }
 
         def to_json(self, data):
-            assert isinstance(data, ErrorResponse)
             return {
-                'errors': self._data_type.to_json(data.errors),
+                'errors': self._data_type.to_json(data),
             }
 
     def __init__(self):
@@ -134,22 +147,21 @@ class JsonSchemaResponsePayloadType(JsonResponsePayloadType):
         return ['application/schema+json']
 
 
-class JsonSchemaResponse(SuccessResponse):
+class JsonSchemaResponse(SuccessResponse, PayloadedMessage):
     @contract
     def __init__(self, schema: Dict):
         super().__init__()
         self._schema = schema
 
     @property
-    @contract
-    def schema(self) -> Dict:
+    def payload(self):
         return self._schema
 
 
 class JsonSchemaResponseType(ResponseType):
     def __init__(self):
-        super().__init__('schema', (JsonSchemaResponsePayloadType(
-            OutputProcessorType(JsonSchemaType(), lambda x: x.schema)),))
+        super().__init__('schema',
+                         (JsonSchemaResponsePayloadType(JsonSchemaType()),))
 
 
 class JsonSchemaEndpoint(Endpoint):
@@ -179,17 +191,20 @@ class JsonSchemaEndpoint(Endpoint):
                 if isinstance(request_payload_type, JsonRequestPayloadType):
                     schema['definitions'].setdefault('request', {})
                     schema['definitions']['request'].setdefault(
-                        request_type.name, request_payload_type.data_type.get_json_schema())
+                        request_type.name,
+                        request_payload_type.data_type.get_json_schema())
 
             response_type = endpoint.response_type
             for response_payload_type in response_type.get_payload_types():
                 if isinstance(response_payload_type, JsonResponsePayloadType):
                     schema['definitions'].setdefault('response', {})
                     schema['definitions']['response'].setdefault(
-                        response_type.name, response_payload_type.data_type.get_json_schema())
+                        response_type.name,
+                        response_payload_type.data_type.get_json_schema())
 
         for error_response_payload_type in self._error_response_type.get_payload_types():
-            if isinstance(error_response_payload_type, JsonResponsePayloadType):
+            if isinstance(error_response_payload_type,
+                          JsonResponsePayloadType):
                 schema['definitions'].setdefault('response', {})
                 schema['definitions']['response'].setdefault(
                     self._error_response_type.name,
@@ -201,26 +216,23 @@ class JsonSchemaEndpoint(Endpoint):
 
 class JsonSchemaId(IdentifiableScalarType):
     def __init__(self):
-        super().__init__({
+        super().__init__('json-schema-id')
+
+    def get_json_schema(self):
+        return {
             'title': 'A JSON Schema ID.',
             'type': 'string',
             'format': 'uri',
-        }, 'json-schema-id')
-
-
-class ExternalJsonSchemaRequestPayloadType(RequestPayloadType):
-    def get_content_types(self):
-        return '',
-
-    def from_http_request(self, http_request: HttpRequest):
-        return ExternalJsonSchemaRequest(
-            base64_decodes(http_request.arguments['id']))
+        }
 
 
 class ExternalJsonSchemaRequestType(RequestType):
     def __init__(self):
-        super().__init__('external-schema', 'GET',
-                         (ExternalJsonSchemaRequestPayloadType(),))
+        super().__init__('external-schema', 'GET')
+
+    def from_http_request(self, http_request: HttpRequest):
+        return ExternalJsonSchemaRequest(
+            base64_decodes(http_request.arguments['id']))
 
     def get_parameters(self):
         return RequestParameter(JsonSchemaId(), name='id'),
@@ -263,39 +275,38 @@ class ExternalJsonSchemaEndpoint(Endpoint):
             raise NotFoundError()
 
 
-class ResourcesResponse(SuccessResponse):
+class ResourcesResponse(SuccessResponse, PayloadedMessage):
     @contract
     def __init__(self, resources: Iterable):
         super().__init__()
         self._resources = resources
 
     @property
-    @contract
-    def resources(self) -> Iterable:
+    def payload(self):
         return self._resources
 
 
+def build_resources_response_type_class(
+        resource_type: Union[OutputDataType, IdentifiableDataType]):
+    class ResourcesResponseType(ResponseType):
+        _resource_type = resource_type
+        _type = ListType(resource_type)
+
+        def __init__(self):
+            super().__init__('%ss' % self._resource_type.name,
+                             (JsonResponsePayloadType(self._type),))
+
+    return ResourcesResponseType
+
+
 class GetResourcesEndpoint(Endpoint):
-    @staticmethod
-    def _build_response_type_class(resource_type: ResourceType):
-        class ResourcesResponseType(ResponseType):
-            _resource_type = resource_type
-            _list_type = ListType(resource_type)
-            _type = OutputProcessorType(_list_type, lambda x: x.resources)
-
-            def __init__(self):
-                super().__init__('%ss' % self._resource_type.name,
-                                 (JsonResponsePayloadType(self._type),))
-
-        return ResourcesResponseType
-
     @contract
     def __init__(self, resources: ResourceRepository):
         resource_name = resources.get_type().name
         super().__init__('%ss' % resource_name,
                          '/%ss' % resource_name,
                          NonConfigurableGetRequestType(),
-                         self._build_response_type_class(
+                         build_resources_response_type_class(
                              resources.get_type())())
         self._resources = resources
 
@@ -314,51 +325,46 @@ class ResourceRequest(Request):
         return self._id
 
 
-class ResourceResponse(SuccessResponse):
+class ResourceResponse(SuccessResponse, PayloadedMessage):
     def __init__(self, resource):
         super().__init__()
         self._resource = resource
 
     @property
-    def resource(self):
+    def payload(self):
         return self._resource
 
 
-class ResourceRequestPayloadType(RequestPayloadType):
-    def get_content_types(self):
-        return '',
+class ResourceRequestType(RequestType):
+    def __init__(self, method='GET', payload_types=()):
+        super().__init__('resource', method, payload_types)
+
+    def get_parameters(self):
+        return RequestParameter(ResourceIdType(), name='id'),
 
     def from_http_request(self, http_request: HttpRequest):
         return ResourceRequest(http_request.arguments['id'])
 
 
-class ResourceRequestType(RequestType):
-    def __init__(self):
-        super().__init__('resource', 'GET', (ResourceRequestPayloadType(),))
+def build_resource_response_type_class(
+        resource_type: Union[OutputDataType, IdentifiableDataType]):
+    class ResourceResponseType(ResponseType):
+        _resource_type = resource_type
 
-    def get_parameters(self):
-        return RequestParameter(ResourceIdType(), name='id'),
+        def __init__(self):
+            super().__init__('%s' % self._resource_type.name,
+                             (JsonResponsePayloadType(self._resource_type),))
+
+    return ResourceResponseType
 
 
 class GetResourceEndpoint(Endpoint):
-    @staticmethod
-    def _build_response_type_class(resource_type: ResourceType):
-        class ResourceResponseType(ResponseType):
-            _resource_type = resource_type
-            _type = OutputProcessorType(_resource_type, lambda x: x.resource)
-
-            def __init__(self):
-                super().__init__('%s' % self._resource_type.name,
-                                 (JsonResponsePayloadType(self._type),))
-
-        return ResourceResponseType
-
     @contract
     def __init__(self, resources: ResourceRepository):
         resource_name = resources.get_type().name
         super().__init__(resource_name, '/%ss/{id}' % resource_name,
                          ResourceRequestType(),
-                         self._build_response_type_class(
+                         build_resource_response_type_class(
                              resources.get_type())())
         self._resources = resources
 
@@ -368,6 +374,274 @@ class GetResourceEndpoint(Endpoint):
             return ResourceResponse(self._resources.get_resource(request.id))
         except ResourceNotFound:
             raise NotFoundError()
+
+
+def build_add_resource_request_type_class(
+        resource_type: Union[InputDataType, IdentifiableDataType]):
+    class AddResourceRequestType(RequestType):
+        _type = resource_type
+
+        def __init__(self):
+            super().__init__('%s' % self._type.name, 'POST',
+                             (JsonRequestPayloadType(self._type),))
+
+        def from_http_request(self, http_request):
+            return AddResourceRequest(
+                self._from_http_request_payload(http_request.body))
+
+    return AddResourceRequestType
+
+
+class AddResourceRequest(Request, PayloadedMessage):
+    def __init__(self, resource):
+        self._resource = resource
+
+    @property
+    def payload(self):
+        return self._resource
+
+
+class AddResourceEndpoint(Endpoint):
+    @contract
+    def __init__(self, resources: ExpandableResourceRepository):
+        resource_name = resources.get_type().name
+        super().__init__('%s-add' % resource_name, '/%ss' % resource_name,
+                         build_add_resource_request_type_class(
+                             resources.get_add_type())(),
+                         build_resource_response_type_class(
+                             resources.get_type())())
+        self._resources = resources
+
+    def handle(self, request: Request):
+        assert isinstance(request, AddResourceRequest)
+        resource = request.payload
+        # @todo How to handle validation?
+        resources = self._resources.add_resources((resource,))
+        return ResourceResponse(list(resources)[0])
+
+
+def build_replace_resource_request_type_class(
+        resource_type: Union[InputDataType, IdentifiableDataType]):
+    class ReplaceResourceRequestType(RequestType):
+        _resource_type = resource_type
+
+        def __init__(self):
+            super().__init__('%s' % self._resource_type.name, 'PUT',
+                             (JsonRequestPayloadType(self._resource_type),))
+
+        def from_http_request(self, http_request: HttpRequest):
+            return ReplaceResourceRequest(http_request.arguments['id'],
+                                          self._from_http_request_payload(
+                                              http_request.body))
+
+        def get_parameters(self):
+            return RequestParameter(ResourceIdType(), name='id'),
+
+    return ReplaceResourceRequestType
+
+
+class ReplaceResourceRequest(Request, PayloadedMessage):
+    @contract
+    def __init__(self, resource_id: str, resource):
+        self._resource_id = resource_id
+        self._resource = resource
+
+    @property
+    def resource_id(self) -> str:
+        return self._resource_id
+
+    @property
+    def payload(self):
+        return self._resource
+
+
+class ReplaceResourceEndpoint(Endpoint):
+    @contract
+    def __init__(self, resources: UpdateableResourceRepository):
+        resource_name = resources.get_type().name
+        super().__init__('%s-replace' % resource_name,
+                         '/%ss/{id}' % resource_name,
+                         build_replace_resource_request_type_class(
+                             resources.get_update_type())(),
+                         build_resource_response_type_class(
+                             resources.get_type())())
+        self._resources = resources
+
+    def handle(self, request: Request):
+        assert isinstance(request, ReplaceResourceRequest)
+        resource = request.payload
+        # @todo How to handle validation?
+        try:
+            resources = self._resources.update_resources((resource,))
+        except ResourceNotFound as e:
+            raise NotFoundError(description=str(e))
+        return ResourceResponse(list(resources)[0])
+
+
+class JsonPatchType(InputDataType, OutputDataType, IdentifiableDataType):
+    def __init__(self):
+        super().__init__('json-patch')
+
+    def get_json_schema(self):
+        with open(RESOURCE_PATH + '/schemas/json-patch.json') as f:
+            return json.load(f)
+
+    def from_json(self, json_data):
+        return JsonPatch(json_data)
+
+    def to_json(self, data):
+        assert isinstance(data, JsonPatch)
+        return data.patch
+
+
+class JsonPatchRequestPayloadType(JsonRequestPayloadType):
+    """
+    An RFC 6902 JSON Patch request payload type.
+    """
+
+    def __init__(self):
+        super().__init__(JsonPatchType())
+
+    def get_content_types(self):
+        return ['application/json-patch+json']
+
+
+class AlterResourceRequest(Request, PayloadedMessage):
+    @contract
+    def __init__(self, resource_id: str, patch: JsonPatch):
+        self._resource_id = resource_id
+        self._patch = patch
+
+    @property
+    @contract
+    def resource_id(self) -> str:
+        return self._resource_id
+
+    @property
+    def payload(self):
+        return self._patch
+
+
+class AlterResourceRequestType(RequestType):
+    @contract
+    def __init__(self, resource_type_name: str):
+        super().__init__('%s-alter' % resource_type_name, 'PATCH',
+                         (JsonPatchRequestPayloadType(),))
+
+    def get_parameters(self):
+        return RequestParameter(ResourceIdType(), name='id'),
+
+    def from_http_request(self, http_request: HttpRequest):
+        return AlterResourceRequest(http_request.arguments['id'],
+                                    self._from_http_request_payload(
+                                        http_request.body))
+
+
+class AlterResourceEndpoint(Endpoint):
+    @contract
+    def __init__(self, resources: UpdateableResourceRepository):
+        resource_type = resources.get_type()
+        # We can only patch resources automatically if the update data type
+        # can serialize as well as deserialize.
+        assert isinstance(resource_type, OutputDataType)
+        resource_name = resource_type.name
+        super().__init__('%s-alter' % resource_name,
+                         '/%ss/{id}' % resource_name,
+                         AlterResourceRequestType(resource_type.name),
+                         build_resource_response_type_class(
+                             resource_type)())
+        self._resources = resources
+
+    def handle(self, request: Request):
+        assert isinstance(request, AlterResourceRequest)
+        resource_type = self._resources.get_update_type()
+        resource_id = request.resource_id
+        patch = request.payload
+        try:
+            resource = self._resources.get_resource(resource_id)
+        except ResourceNotFound:
+            raise NotFoundError()
+        resource_data = resource_type.to_json(resource)
+        resource_data = patch.apply(resource_data)
+        resource = resource_type.from_json(resource_data)
+        # @todo How to handle validation?
+        # The resource could have been removed since the last check.
+        try:
+            resources = self._resources.update_resources((resource,))
+        except ResourceNotFound as e:
+            raise NotFoundError(description=str(e))
+        return ResourceResponse(list(resources)[0])
+
+
+class AlterResourcesRequest(Request, PayloadedMessage):
+    @contract
+    def __init__(self, patch: JsonPatch):
+        self._patch = patch
+
+    @property
+    def payload(self):
+        return self._patch
+
+
+class AlterResourcesRequestType(RequestType):
+    @contract
+    def __init__(self, resource_type_name: str):
+        super().__init__('%ss-alter' % resource_type_name, 'PATCH',
+                         (JsonPatchRequestPayloadType(),))
+
+    def from_http_request(self, http_request: HttpRequest):
+        return AlterResourcesRequest(
+            self._from_http_request_payload(http_request.body))
+
+
+class AlterResourcesEndpoint(Endpoint):
+    @contract
+    def __init__(self, resources: UpdateableResourceRepository):
+        resource_type = resources.get_type()
+        # We can only patch resources automatically if the update data type
+        # can serialize as well as deserialize.
+        assert isinstance(resource_type, OutputDataType)
+        resource_name = resource_type.name
+        super().__init__('%ss-alter' % resource_name,
+                         '/%ss' % resource_name,
+                         AlterResourcesRequestType(resource_type.name),
+                         build_resources_response_type_class(
+                             resource_type)())
+        self._resources = resources
+
+    def handle(self, request: Request):
+        assert isinstance(request, AlterResourcesRequest)
+        resource_type = self._resources.get_update_type()
+        patch = request.payload
+        resources = self._resources.get_resources()
+        updated_resources = []
+        for resource in resources:
+            resource_data = resource_type.to_json(resource)
+            resource_data = patch.apply(resource_data)
+            updated_resources.append(resource_type.from_json(resource_data))
+        # @todo How to handle validation?
+        updated_resources = self._resources.update_resources(updated_resources)
+        return ResourcesResponse(updated_resources)
+
+
+class DeleteResourceEndpoint(Endpoint):
+    @contract
+    def __init__(self, resources: ShrinkableResourceRepository):
+        resource_name = resources.get_type().name
+        super().__init__('%s-delete' % resource_name,
+                         '/%ss/{id}' % resource_name,
+                         ResourceRequestType('DELETE'),
+                         EmptyResponseType())
+        self._resources = resources
+
+    def handle(self, request: Request):
+        assert isinstance(request, ResourceRequest)
+        try:
+            resource = self._resources.get_resource(request.id)
+        except ResourceNotFound:
+            return SuccessResponse()
+        self._resources.delete_resources((resource,))
+        return SuccessResponse()
 
 
 class ResourceEndpointRepository(EndpointRepository):
@@ -401,5 +675,14 @@ class ResourceEndpointRepository(EndpointRepository):
             GetResourceEndpoint(resources),
             GetResourcesEndpoint(resources),
         ]
+        if isinstance(resources, ExpandableResourceRepository):
+            endpoints.append(AddResourceEndpoint(resources))
+        if isinstance(resources, UpdateableResourceRepository):
+            endpoints.append(ReplaceResourceEndpoint(resources))
+            if isinstance(resources.get_update_type(), OutputDataType):
+                endpoints.append(AlterResourceEndpoint(resources))
+                endpoints.append(AlterResourcesEndpoint(resources))
+        if isinstance(resources, ShrinkableResourceRepository):
+            endpoints.append(DeleteResourceEndpoint(resources))
 
         return endpoints

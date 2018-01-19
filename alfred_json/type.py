@@ -1,5 +1,5 @@
 import abc
-from typing import Dict, Callable
+from typing import Dict
 
 from contracts import contract
 
@@ -21,33 +21,6 @@ class InputDataType(DataType):
     @abc.abstractmethod
     def from_json(self, json_data):
         pass
-
-
-class InputProcessorType(InputDataType):
-    @contract
-    def __init__(self, data_type: InputDataType, processor: Callable):
-        self._type = data_type
-        self._processor = processor
-
-    def get_json_schema(self):
-        return self._type.get_json_schema()
-
-    def from_json(self, json_data):
-        self._type.from_json(self._processor(json_data))
-        pass
-
-
-class OutputProcessorType(OutputDataType):
-    @contract
-    def __init__(self, data_type: OutputDataType, processor: Callable):
-        self._type = data_type
-        self._processor = processor
-
-    def get_json_schema(self):
-        return self._type.get_json_schema()
-
-    def to_json(self, data):
-        return self._type.to_json(self._processor(data))
 
 
 class ScalarType(OutputDataType, InputDataType):
@@ -106,20 +79,16 @@ class ListType(InputDataType, OutputDataType):
         return list(map(self._item_type.to_json, data))
 
 
-class IdentifiableDataType(OutputDataType):
+class IdentifiableDataType(DataType):
     """
     These are JSON Schemas that provide metadata so they can be aggregated and
     re-used throughout a schema. See IdentifiableDataTypeAggregator.
     """
 
     @contract
-    def __init__(self, schema: Dict, name: str, group_name: str = 'data'):
+    def __init__(self, name: str, group_name: str = 'data'):
         self._group_name = group_name
         self._name = name
-        self._schema = schema
-
-    def get_json_schema(self):
-        return self._schema
 
     @property
     @contract
