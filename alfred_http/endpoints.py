@@ -222,18 +222,12 @@ class RequestType(MessageType):
     def method(self) -> str:
         return self._method
 
-    @dispatch()
     def validate_http_request(self, http_request: HttpRequest):
         """
         Validates an incoming HTTP request.
         :param http_request:
         :return:
         """
-        pass
-
-    @validate_http_request.register()
-    @contract
-    def _validate_http_request_arguments(self, http_request: HttpRequest):
         validator = App.current.service('json', 'validator')
         for parameter in self.get_parameters():
             name = parameter.name
