@@ -3,6 +3,7 @@ import subprocess
 from _signal import SIGINT
 from os.path import dirname
 from subprocess import Popen
+from time import sleep
 from typing import Optional, Dict
 
 import requests
@@ -72,10 +73,17 @@ class HttpTestCase(AppTestCase):
         endpoint = endpoints.get_endpoint(endpoint_name)
         assert isinstance(endpoint, Endpoint)
         # @todo Ensure we only pass query parameters to `requests`.
-        response = getattr(requests, endpoint.request_type.method.lower())(url,
+        response = None
+        while response is None:
+            try:
+                response = getattr(requests, endpoint.request_type.method.lower())(url,
                                                                            data=body,
                                                                            params=parameters,
                                                                            headers=headers)
+            except ConnectionRefusedError:
+                # uWSGI can take a little long to boot, so allow it fo fail.
+                sleep(1)
+                continue
 
         # Validate the content headers.
         accepted_content_types = []
