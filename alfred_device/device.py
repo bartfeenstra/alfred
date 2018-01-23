@@ -1,4 +1,3 @@
-import abc
 from typing import Optional, Iterable, Dict
 
 from contracts import with_metaclass, ContractsMeta, contract
@@ -8,12 +7,17 @@ from alfred import format_iter
 
 class Device(with_metaclass(ContractsMeta)):
     @contract
-    def __init__(self, device_id: str):
+    def __init__(self, device_id: str, device_type: str):
         self._id = device_id
+        self._type = device_type
 
     @property
     def id(self) -> str:
         return self._id
+
+    @property
+    def type(self) -> str:
+        return self._type
 
 
 class DeviceNotFound(RuntimeError):
@@ -53,7 +57,6 @@ class StaticDeviceRepository(DeviceRepository):
         except KeyError:
             raise DeviceNotFound(device_id, self._devices)
 
-    @contract
     def get_devices(self) -> Iterable:
         return list(self._devices.values())
 
@@ -93,20 +96,19 @@ class NestedDeviceRepository(DeviceRepository):
 
 class Powerable:
     def __init__(self):
-        self._powered = None
+        self._powered = False
 
     @property
     def powered(self) -> Optional[bool]:
         return self._powered
 
-    def powerUp(self):
-        self._powered = True
+    @powered.setter
+    @contract
+    def powered(self, powered: bool):
+        self._powered = powered
 
-    def powerDown(self):
-        self._powered = False
 
-
-class RgbColor:
+class Rgb24Color:
     @contract
     def __init__(self, red: int, green: int, blue: int):
         assert 0 <= red <= 255
@@ -129,16 +131,16 @@ class RgbColor:
         return self._green
 
 
-class RgbLight:
+class Rgb24Colorable:
     def __init__(self):
-        self._color = None
+        self._color = Rgb24Color(0, 0, 0)
 
     @property
     @contract
-    def color(self) -> RgbColor:
+    def color(self) -> Rgb24Color:
         return self._color
 
-    @abc.abstractmethod
+    @color.setter
     @contract
-    def changeColor(self, color: RgbColor):
-        pass
+    def color(self, color: Rgb24Color):
+        self._color = color

@@ -26,17 +26,16 @@ class IdentifiableDataTypeAggregator(Rewriter):
         Rewrites an IdentifiableDataType.
         """
         if isinstance(data_type, IdentifiableDataType):
-            definitions.setdefault(data_type.group_name, {})
-            if data_type.name not in definitions[data_type.group_name]:
+            definitions.setdefault('data', {})
+            if data_type.name not in definitions['data']:
                 # Set a placeholder definition to avoid infinite loops.
-                definitions[data_type.group_name][data_type.name] = {}
+                definitions['data'][data_type.name] = {}
                 # Rewrite the type itself, because it may contain further
                 # types.
                 schema, definitions = self._rewrite(data_type.get_json_schema(), definitions)
-                definitions[data_type.group_name][data_type.name] = schema
+                definitions['data'][data_type.name] = schema
             return {
-                       '$ref': '#/definitions/%s/%s' % (data_type.group_name,
-                                                        data_type.name),
+                       '$ref': '#/definitions/%s/%s' % ('data', data_type.name),
                    }, definitions
         else:
             # Rewrite the type itself, because it may contain further
@@ -59,10 +58,6 @@ class IdentifiableDataTypeAggregator(Rewriter):
     def _rewrite(self, data, definitions: Dict) -> Tuple:
         data = copy(data)
         definitions = copy(definitions)
-        # @todo
-        # @todo Rewrite non-identifiable type as well, just don't aggregate them.
-        # @todo
-        # @todo
         if isinstance(data, DataType):
             return self._rewrite_data_type(data, definitions)
         if isinstance(data, List):

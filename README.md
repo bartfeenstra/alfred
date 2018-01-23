@@ -9,7 +9,3 @@ Alfred is a home automation system built in Python.
 ## Requirements
 - Python 3.5+
 - Bash
-
-### OpenAPI
-- [Git](https://git-scm.com/)
-- [Yarn](https://yarnpkg.com/)

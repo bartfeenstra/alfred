@@ -8,7 +8,7 @@ trap '(( exit_code |= $? ))' ERR
 
 flake8 --ignore=E501 ./alfred
 flake8 --ignore=E501 ./alfred_http
-flake8 --ignore=E501 ./alfred_manor
+flake8 --ignore=E501 ./alfred_maison
 flake8 --ignore=E501 ./alfred_openapi
 flake8 --ignore=E501 ./alfred_rest
 coverage run -m nose2

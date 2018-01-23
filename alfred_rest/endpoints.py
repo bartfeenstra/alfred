@@ -328,6 +328,7 @@ class ResourceRequest(Request):
 class ResourceResponse(SuccessResponse, PayloadedMessage):
     def __init__(self, resource):
         super().__init__()
+        assert resource is not None
         self._resource = resource
 
     @property
@@ -563,14 +564,13 @@ class AlterResourceEndpoint(Endpoint):
             raise NotFoundError()
         resource_data = resource_type.to_json(resource)
         resource_data = patch.apply(resource_data)
-        resource = resource_type.from_json(resource_data)
+        resource_type.update_from_json(resource_data, resource)
         # @todo How to handle validation?
-        # The resource could have been removed since the last check.
         try:
-            resources = self._resources.update_resources((resource,))
+            updated_resource = self._resources.update_resource(resource)
         except ResourceNotFound as e:
             raise NotFoundError(description=str(e))
-        return ResourceResponse(list(resources)[0])
+        return ResourceResponse(updated_resource)
 
 
 class AlterResourcesRequest(Request, PayloadedMessage):

@@ -3,7 +3,7 @@ from typing import Iterable
 from contracts import contract
 
 from alfred_json.type import IdentifiableDataType, OutputDataType, \
-    InputDataType
+    InputDataType, UpdateInputDataType
 from alfred_rest.resource import ResourceNotFound, \
     ShrinkableResourceRepository, ExpandableResourceRepository, ResourceIdType, \
     UpdateableResourceRepository
@@ -22,6 +22,10 @@ class RestTestResource:
     @property
     def label(self):
         return self._label
+
+    @label.setter
+    def label(self, label):
+        self._label = label
 
 
 class RestTestResourceType(IdentifiableDataType, OutputDataType):
@@ -69,7 +73,7 @@ class AddRestTestResourceType(IdentifiableDataType, InputDataType):
         return RestTestResource(json_data['id'], label)
 
 
-class UpdateRestTestResourceType(IdentifiableDataType, InputDataType, OutputDataType):
+class UpdateRestTestResourceType(IdentifiableDataType, InputDataType, UpdateInputDataType, OutputDataType):
     def __init__(self):
         super().__init__('rest-test-update')
 
@@ -89,6 +93,10 @@ class UpdateRestTestResourceType(IdentifiableDataType, InputDataType, OutputData
         label = json_data['label'] if 'label' in json_data else ''
         return RestTestResource(json_data['id'], label)
 
+    def update_from_json(self, json_data, instance):
+        assert (instance.id == json_data['id'])
+        instance.label = json_data['label']
+
     def to_json(self, data):
         return {
             'id': data.id,
@@ -96,8 +104,7 @@ class UpdateRestTestResourceType(IdentifiableDataType, InputDataType, OutputData
         }
 
 
-class RestTestResourceRepository(ShrinkableResourceRepository,
-                                 ExpandableResourceRepository, UpdateableResourceRepository):
+class RestTestResourceRepository(ShrinkableResourceRepository, ExpandableResourceRepository, UpdateableResourceRepository):
     def __init__(self):
         self._type = RestTestResourceType()
         self._add_type = AddRestTestResourceType()
@@ -124,24 +131,37 @@ class RestTestResourceRepository(ShrinkableResourceRepository,
         except KeyError:
             raise ResourceNotFound(resource_id)
 
-    def get_resources(self):
-        return self._resources.values()
+    def get_resources(self, ids=None, filters=()):
+        resources = self._resources.values()
+        if ids is not None:
+            resources = filter(lambda x: x.id in ids, resources)
+        return resources
+
+    def add_resource(self, resource):
+        if resource.id in self._resources:
+            # @todo Convert this to a proper (HTTP?) exception.
+            raise RuntimeError()
+        self._resources[resource.id] = resource
 
     def add_resources(self, resources: Iterable):
         for resource in resources:
-            if resource.id in self._resources:
-                # @todo Convert this to a proper (HTTP?) exception.
-                raise RuntimeError()
-            self._resources[resource.id] = resource
+            self.add_resource(resource)
         return resources
+
+    def update_resource(self, resource):
+        if resource.id not in self._resources:
+            raise ResourceNotFound(self._type.name)
+        self._resources[resource.id] = resource
+        return resource
 
     def update_resources(self, resources: Iterable):
         for resource in resources:
-            if resource.id not in self._resources:
-                raise ResourceNotFound(self._type.name)
-            self._resources[resource.id] = resource
+            self.update_resource(resource)
         return resources
+
+    def delete_resource(self, resource):
+        del self._resources[resource.id]
 
     def delete_resources(self, resources: Iterable):
         for resource in resources:
-            del self._resources[resource.id]
+            self.delete_resource(resource)
