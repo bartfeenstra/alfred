@@ -3,7 +3,7 @@ from typing import List, Iterable
 from contracts import contract
 
 from alfred_device.device import DeviceRepository, DeviceNotFound, Powerable, \
-    Rgb24Colorable, Rgb24Color, Device
+    Rgb24Colorable, Rgb24Color, Device, Illuminative
 from alfred_http.endpoints import BadRequestError
 from alfred_json.type import OutputDataType, InputDataType, \
     UpdateInputDataType
@@ -62,6 +62,30 @@ class PowerableType(UpdateInputDataType, OutputDataType):
                 'powered': data.powered,
             }
         return {}
+
+
+class IlluminativeType(UpdateInputDataType, OutputDataType):
+    def get_json_schema(self):
+        return {
+            'type': 'object',
+            'properties': {
+                'luminosity': {
+                    'title': 'The luminosity as a float percentage.',
+                    'type': 'float',
+                },
+            },
+            'required': ['luminosity'],
+        }
+
+    def update_from_json(self, json_data, instance):
+        assert isinstance(instance, Illuminative)
+        instance.luminosity = json_data['luminosity']
+
+    def to_json(self, data):
+        assert isinstance(data, Illuminative)
+        return {
+            'luminosity': data.luminosity,
+        }
 
 
 class Rgb24TupleColorType(InputDataType, OutputDataType):
