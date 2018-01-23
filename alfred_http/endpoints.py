@@ -7,7 +7,6 @@ from flask import url_for
 
 from alfred import format_iter
 from alfred.app import App
-from alfred.dispatch import dispatch
 from alfred_http.http import HttpRequest, HttpResponse, HttpBody, \
     HttpResponseBuilder
 from alfred_json.type import IdentifiableScalarType, InputDataType
@@ -229,18 +228,12 @@ class RequestType(MessageType):
     def method(self) -> str:
         return self._method
 
-    @dispatch()
     def validate_http_request(self, http_request: HttpRequest):
         """
         Validates an incoming HTTP request.
         :param http_request:
         :return:
         """
-        pass
-
-    @validate_http_request.register()
-    @contract
-    def _validate_http_request_arguments(self, http_request: HttpRequest):
         validator = App.current.service('json', 'validator')
         for parameter in self.get_parameters():
             name = parameter.name
