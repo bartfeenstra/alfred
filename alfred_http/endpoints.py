@@ -56,6 +56,13 @@ class NotFoundError(Error):
         super().__init__(self.CODE, 'Not found', 404, **kwargs)
 
 
+class MethodNotAllowedError(Error):
+    CODE = 'method_not_allowed'
+
+    def __init__(self, **kwargs):
+        super().__init__(self.CODE, 'HTTP method not allowed', 405, **kwargs)
+
+
 class NotAcceptableError(Error):
     CODE = 'not_acceptable'
 

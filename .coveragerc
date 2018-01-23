@@ -3,7 +3,7 @@ source =
     alfred
     alfred_http
     alfred_json
-    alfred_manor
+    alfred_maison
     alfred_openapi
     alfred_rest
 
