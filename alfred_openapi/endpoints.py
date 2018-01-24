@@ -1,6 +1,5 @@
 from apispec import APISpec
 from contracts import contract
-from jinja2 import Template
 
 from alfred.app import App
 from alfred_http.endpoints import Endpoint, NonConfigurableGetRequestType, \
@@ -34,17 +33,11 @@ class OpenApiSpecificationType(OutputDataType):
 
 
 class ReDocResponsePayloadType(ResponsePayloadType):
-    def __init__(self):
-        self._urls = App.current.service('http', 'urls')
-
     def get_content_types(self):
         return ['text/html']
 
     def to_http_response_body(self, payload, content_type):
-        template = Template(
-            open(RESOURCE_PATH + '/templates/redoc.html.j2').read())
-        spec_url = self._urls.build('openapi')
-        return HttpBody(template.render(spec_url=spec_url), content_type)
+        return HttpBody(open(RESOURCE_PATH + '/templates/redoc.html').read(), content_type)
 
 
 class OpenApiResponseType(ResponseType):
