@@ -1,3 +1,4 @@
+import json
 import traceback
 from typing import Optional, Dict, Iterable
 from urllib.parse import urldefrag
@@ -45,7 +46,7 @@ class RestTestCase(HttpTestCase):
                     schema_url, response_type.name)
                 response_schema = self._get_schema(response_schema_url)
                 json_validator = self._app.service('json', 'validator')
-                json_validator.validate(response.json(), response_schema)
+                json_validator.validate(json.loads(response.body.content), response_schema)
                 requirements = []
                 break
             except Exception:
@@ -89,7 +90,7 @@ class RestTestCase(HttpTestCase):
 
     @contract
     def assertRestErrorResponse(self, error_codes: Iterable, response):
-        data = response.json()
+        data = json.loads(response.body.content)
         schema_url = self._app.service('http', 'urls').build('schema')
         response_schema_url = '%s#/definitions/response/error' % (schema_url,)
         response_schema = self._get_schema(response_schema_url)
