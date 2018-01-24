@@ -12,7 +12,7 @@ from alfred_rest.resource import ResourceNotFound, \
 
 
 class DeviceType(ResourceType):
-    def __init__(self, data_type_name: str='device'):
+    def __init__(self, data_type_name: str = 'device'):
         ResourceType.__init__(self, data_type_name)
 
     def get_json_schema(self):
@@ -79,7 +79,7 @@ class IlluminativeType(UpdateInputDataType, OutputDataType):
 
     def update_from_json(self, json_data, instance):
         assert isinstance(instance, Illuminative)
-        instance.luminosity = json_data['luminosity']
+        instance.luminosity = float(json_data['luminosity'])
 
     def to_json(self, data):
         assert isinstance(data, Illuminative)

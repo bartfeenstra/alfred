@@ -52,27 +52,29 @@ class Ola(Device, Powerable, Rgb24Colorable, Illuminative):
         self._blue_channel = blue_slot
         self._luminosity_slot = luminosity_slot
 
-    @Powerable.powered.getter
+    @property
     def powered(self):
-        return self.luminosity != 0
+        return self.luminosity != 0.0
 
-    @Powerable.powered.setter
+    @powered.setter
     def powered(self, powered):
-        self.luminosity = 0.0
+        self.luminosity = 1.0 if powered else 0.0
 
-    @Illuminative.luminosity.getter
+    @property
     def luminosity(self):
         return self._dmx.get(self._luminosity_slot) / 255 * 100
 
-    @Illuminative.luminosity.setter
+    @luminosity.setter
     def luminosity(self, luminosity):
         self._dmx.set(self._luminosity_slot, round(luminosity / 100 * 255))
 
-    @Rgb24Colorable.color.getter
+    @property
     def color(self):
-        return Rgb24Color(*self._dmx.get_multiple((self._red_channel, self._green_channel, self._blue_channel)))
+        return Rgb24Color(*self._dmx.get_multiple(
+            (self._red_channel, self._green_channel,
+             self._blue_channel)).values())
 
-    @Rgb24Colorable.color.setter
+    @color.setter
     @contract
     def color(self, color: Rgb24Color):
         self._dmx.set_multiple({
@@ -80,4 +82,3 @@ class Ola(Device, Powerable, Rgb24Colorable, Illuminative):
             self._green_channel: color.green,
             self._blue_channel: color.blue,
         })
-

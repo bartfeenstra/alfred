@@ -110,7 +110,7 @@ class Powerable:
 
 class Illuminative:
     def __init__(self):
-        self._luminosity = 0.0
+        self._luminosity = 0.01
 
     @property
     @contract

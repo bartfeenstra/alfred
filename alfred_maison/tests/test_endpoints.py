@@ -1,4 +1,5 @@
 import json
+from unittest.mock import patch
 
 from alfred_maison.tests import MaisonTestCase
 
@@ -15,7 +16,8 @@ class GetStageLightEndpointTest(MaisonTestCase):
 
 
 class AlterStageLightEndpointTest(MaisonTestCase):
-    def testEndpointShouldAlterResource(self):
+    @patch('subprocess.call')
+    def testEndpointShouldAlterResource(self, mock_call):
         resource_id = 'stage_1'
         powered = True
         color = '#123456'
@@ -48,7 +50,10 @@ class AlterStageLightEndpointTest(MaisonTestCase):
         self.assertEqual(data['id'], resource_id)
         self.assertEqual(data['powered'], powered)
         self.assertEqual(data['color'], color)
-        self.assertEqual(data['luminosity'], luminosity)
+        mock_call.assert_any_call(['ola_set_dmx', '-u', '1', '-d', '18,52,86'])
+        self.assertAlmostEqual(data['luminosity'], luminosity, places=0)
+        mock_call.assert_any_call(
+            ['ola_set_dmx', '-u', '1', '-d', '18,52,86,186'])
 
         # Confirm we can retrieve the resource we just altered.
         response = self.request('device', parameters={
@@ -59,4 +64,4 @@ class AlterStageLightEndpointTest(MaisonTestCase):
         self.assertEqual(data['id'], resource_id)
         self.assertEqual(data['powered'], powered)
         self.assertEqual(data['color'], color)
-        self.assertEqual(data['luminosity'], luminosity)
+        self.assertAlmostEqual(data['luminosity'], luminosity, places=0)
