@@ -1,3 +1,5 @@
+import json
+
 from jsonschema import validate
 
 from alfred_openapi import openapi_schema
@@ -11,7 +13,7 @@ class OpenApiEndpointTest(OpenApiTestCase):
         })
         self.assertResponseStatus(200, response)
         self.assertResponseContentType('application/json', response)
-        spec = response.json()
+        spec = json.loads(response.body.content)
         schema = openapi_schema()
         validate(spec, schema)
 

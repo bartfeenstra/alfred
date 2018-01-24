@@ -1,19 +1,13 @@
-import os
-import subprocess
-from _signal import SIGINT
-from os.path import dirname
-from subprocess import Popen
+from time import sleep
 from typing import Optional, Dict
 
-import requests
 from contracts import contract
-from flask import Response as HttpResponse
 
 from alfred import indent, format_iter
-from alfred import qualname
 from alfred.tests import expand_data, AppTestCase
 from alfred_http.endpoints import Endpoint
 from alfred_http.extension import HttpExtension
+from alfred_http.http import HttpResponse, HttpBody
 
 
 def provide_4xx_codes():
@@ -37,22 +31,10 @@ def provide_5xx_codes():
 class HttpTestCase(AppTestCase):
     def setUp(self):
         super().setUp()
-        extensions = self.get_extension_classes()
-        self._flask_app = self._app.service('http', 'flask')
-        self._flask_app_context = self._flask_app.app_context()
+        flask_app = self._app.service('http', 'flask')
+        self._flask_app = flask_app.test_client()
+        self._flask_app_context = flask_app.app_context()
         self._flask_app_context.push()
-
-        # Set up the app under test.
-        uwsgi = ['uwsgi', '--http-socket', '0.0.0.0:5000',
-                 '--manage-script-name', '--master', '--no-orphans', '--mount',
-                 '/=alfred_http.flask.entry_point:app']
-        if extensions:
-            uwsgi.append('--pyargv')
-            uwsgi.append('%s' % ' '.join(map(qualname, extensions)))
-        working_directory = dirname(
-            dirname(dirname(os.path.realpath(__file__))))
-        self._uwsgi = Popen(uwsgi, cwd=working_directory,
-                            stdout=subprocess.DEVNULL)
 
     def get_extension_classes(self):
         return super().get_extension_classes() + [HttpExtension]
@@ -60,8 +42,6 @@ class HttpTestCase(AppTestCase):
     def tearDown(self):
         super().tearDown()
         self._flask_app_context.pop()
-        self._uwsgi.send_signal(SIGINT)
-        self._uwsgi.wait()
 
     def request(self, endpoint_name: str, body: Optional[str] = None,
                 parameters: Optional[Dict] = None,
@@ -72,10 +52,18 @@ class HttpTestCase(AppTestCase):
         endpoint = endpoints.get_endpoint(endpoint_name)
         assert isinstance(endpoint, Endpoint)
         # @todo Ensure we only pass query parameters to `requests`.
-        response = getattr(requests, endpoint.request_type.method.lower())(url,
-                                                                           data=body,
-                                                                           params=parameters,
-                                                                           headers=headers)
+        response = None
+        while response is None:
+            try:
+                response = getattr(self._flask_app,
+                                   endpoint.request_type.method.lower())(url,
+                                                                         data=body,
+                                                                         query_string=parameters,
+                                                                         headers=headers)
+            except ConnectionRefusedError:
+                # uWSGI can take a little long to boot, so allow it fo fail.
+                sleep(1)
+                continue
 
         # Validate the content headers.
         accepted_content_types = []
@@ -105,18 +93,18 @@ class HttpTestCase(AppTestCase):
                     response.status_code,
                     indent(format_iter(accepted_content_types))))
 
-        return response
+        return HttpResponse(response.status_code, HttpBody(response.get_data(as_text=True), response.headers['Content-Type']), dict(response.headers))
 
     @contract
-    def assertResponseStatus(self, status: int, response):
+    def assertResponseStatus(self, status: int, response: HttpResponse):
         # Allow statuses to be specified using their major digit only.
         if 0 > status < 10:
-            self.assertEquals(str(response.status_code)[0], status)
+            self.assertEquals(str(response.status)[0], status)
         else:
-            self.assertEquals(response.status_code, status)
+            self.assertEquals(response.status, status)
 
     @contract
-    def assertResponseContentType(self, content_type: str, response):
+    def assertResponseContentType(self, content_type: str, response: HttpResponse):
         self.assertHeader('Content-Type', content_type, response)
 
     @contract

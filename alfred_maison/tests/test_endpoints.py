@@ -10,7 +10,7 @@ class GetStageLightEndpointTest(MaisonTestCase):
             'id': resource_id,
         })
         self.assertResponseStatus(200, response)
-        data = response.json()
+        data = json.loads(response.body.content)
         self.assertEqual(data['id'], resource_id)
 
 
@@ -44,7 +44,7 @@ class AlterStageLightEndpointTest(MaisonTestCase):
             'Accept': 'application/json',
         })
         self.assertResponseStatus(200, response)
-        data = response.json()
+        data = json.loads(response.body.content)
         self.assertEqual(data['id'], resource_id)
         self.assertEqual(data['powered'], powered)
         self.assertEqual(data['color'], color)
@@ -55,7 +55,7 @@ class AlterStageLightEndpointTest(MaisonTestCase):
             'id': resource_id,
         })
         self.assertResponseStatus(200, response)
-        data = response.json()
+        data = json.loads(response.body.content)
         self.assertEqual(data['id'], resource_id)
         self.assertEqual(data['powered'], powered)
         self.assertEqual(data['color'], color)
