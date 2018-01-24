@@ -16,7 +16,7 @@ class JsonSchemaEndpointTest(RestTestCase):
         })
         self.assertResponseStatus(200, response)
         self.assertResponseContentType(content_type, response)
-        actual_schema = response.json()
+        actual_schema = json.loads(response.body.content)
         validate(actual_schema, json_schema())
         expected_response_schema = {
             '$ref': 'http://127.0.0.1:5000/about/json/external-schema/aHR0cDovL2pzb24tc2NoZW1hLm9yZy9kcmFmdC0wNC9zY2hlbWE%3D'
@@ -43,7 +43,7 @@ class ExternalJsonSchemaEndpointTest(RestTestCase):
         })
         self.assertResponseStatus(200, response)
         self.assertResponseContentType(content_type, response)
-        actual_schema = response.json()
+        actual_schema = json.loads(response.body.content)
         expected_schema = self._app.service(
             'json', 'schema_rewriter').rewrite(json_schema())
         self.assertEquals(actual_schema, expected_schema)
@@ -68,7 +68,7 @@ class GetResourceEndpointTest(RestTestCase):
             'id': resource_id,
         })
         self.assertResponseStatus(200, response)
-        data = response.json()
+        data = json.loads(response.body.content)
         self.assertEqual(data['id'], resource_id)
 
     def testEndpointShouldNotFoundForUnknownResource(self):
@@ -84,7 +84,7 @@ class GetResourcesEndpointTest(RestTestCase):
         expected_ids = ['foo', 'Bar']
         response = self.request('rest-tests')
         self.assertResponseStatus(200, response)
-        data = response.json()
+        data = json.loads(response.body.content)
         actual_ids = []
         for resource_data in data:
             actual_ids.append(resource_data['id'])
@@ -104,7 +104,7 @@ class AddResourceEndpointTest(RestTestCase):
             'Accept': 'application/json',
         })
         self.assertResponseStatus(200, response)
-        data = response.json()
+        data = json.loads(response.body.content)
         self.assertEqual(data['id'], resource_id)
         self.assertEqual(data['label'], resource_label)
 
@@ -113,7 +113,7 @@ class AddResourceEndpointTest(RestTestCase):
             'id': resource_id,
         })
         self.assertResponseStatus(200, response)
-        data = response.json()
+        data = json.loads(response.body.content)
         self.assertEqual(data['id'], resource_id)
         self.assertEqual(data['label'], resource_label)
 
@@ -164,7 +164,7 @@ class ReplaceResourceEndpointTest(RestTestCase):
             'Accept': 'application/json',
         })
         self.assertResponseStatus(200, response)
-        data = response.json()
+        data = json.loads(response.body.content)
         self.assertEqual(data['id'], resource_id)
         self.assertEqual(data['label'], resource_label)
 
@@ -173,7 +173,7 @@ class ReplaceResourceEndpointTest(RestTestCase):
             'id': resource_id,
         })
         self.assertResponseStatus(200, response)
-        data = response.json()
+        data = json.loads(response.body.content)
         self.assertEqual(data['id'], resource_id)
         self.assertEqual(data['label'], resource_label)
 
@@ -249,7 +249,7 @@ class AlterResourceEndpointTest(RestTestCase):
             'Accept': 'application/json',
         })
         self.assertResponseStatus(200, response)
-        data = response.json()
+        data = json.loads(response.body.content)
         self.assertEqual(data['id'], resource_id)
         self.assertEqual(data['label'], resource_label)
 
@@ -258,7 +258,7 @@ class AlterResourceEndpointTest(RestTestCase):
             'id': resource_id,
         })
         self.assertResponseStatus(200, response)
-        data = response.json()
+        data = json.loads(response.body.content)
         self.assertEqual(data['id'], resource_id)
         self.assertEqual(data['label'], resource_label)
 
@@ -337,7 +337,7 @@ class AlterResourcesEndpointTest(RestTestCase):
             'Accept': 'application/json',
         })
         self.assertResponseStatus(200, response)
-        data = response.json()
+        data = json.loads(response.body.content)
         self.assertIsInstance(data, List)
         for resource_data in data:
             self.assertEqual(resource_data['label'], resource_label)
@@ -345,7 +345,7 @@ class AlterResourcesEndpointTest(RestTestCase):
         # Confirm we can retrieve the resources we just altered.
         response = self.request('rest-tests')
         self.assertResponseStatus(200, response)
-        data = response.json()
+        data = json.loads(response.body.content)
         self.assertIsInstance(data, List)
         for resource_data in data:
             self.assertEqual(resource_data['label'], resource_label)
