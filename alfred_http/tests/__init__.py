@@ -1,4 +1,3 @@
-from time import sleep
 from typing import Optional, Dict
 
 from contracts import contract
@@ -52,18 +51,18 @@ class HttpTestCase(AppTestCase):
         endpoint = endpoints.get_endpoint(endpoint_name)
         assert isinstance(endpoint, Endpoint)
         # @todo Ensure we only pass query parameters to `requests`.
-        response = None
-        while response is None:
-            try:
-                response = getattr(self._flask_app,
-                                   endpoint.request_type.method.lower())(url,
-                                                                         data=body,
-                                                                         query_string=parameters,
-                                                                         headers=headers)
-            except ConnectionRefusedError:
-                # uWSGI can take a little long to boot, so allow it fo fail.
-                sleep(1)
-                continue
+        flask_http_response = getattr(self._flask_app,
+                                      endpoint.request_type.method.lower())(
+            url,
+            data=body,
+            query_string=parameters,
+            headers=headers)
+        http_response = HttpResponse(flask_http_response.status_code,
+                                     HttpBody(flask_http_response.get_data(
+                                         as_text=True),
+                                         flask_http_response.headers[
+                                             'Content-Type']),
+                                     dict(flask_http_response.headers))
 
         # Validate the content headers.
         accepted_content_types = []
@@ -78,22 +77,24 @@ class HttpTestCase(AppTestCase):
                 # The client accepts any response.
                 not accepted_content_types or
                 # An accepted success or error response.
-                response.headers['Content-Type'] in accepted_content_types or
+                http_response.headers[
+                    'Content-Type'] in accepted_content_types or
                 # An empty error response.
-                400 <= response.status_code < 600 and
-                ('Content-Type' not in response.headers or
-                 not response.headers['Content-Type']) and
-                ('Content-Length' not in response.headers or
-                 not int(response.headers['Content-Length']))
+                400 <= http_response.status < 600 and
+                ('Content-Type' not in http_response.headers or
+                 not http_response.headers['Content-Type']) and
+                ('Content-Length' not in http_response.headers or
+                 not int(http_response.headers['Content-Length']))
         ):
-            empty = 'a non-empty' if len(response.text) > 0 else 'an empty'
+            empty = 'a non-empty' if len(
+                http_response.body.content) > 0 else 'an empty'
             raise AssertionError(
                 '%s returned %s "%s" HTTP %d response, but it must either respond with an empty HTTP 4xx or 5xx response (empty body, and Content-Type and Content-Length headers), or one of the following content types:\n%s.' % (
-                    url, empty, response.headers['Content-Type'],
-                    response.status_code,
+                    url, empty, http_response.headers['Content-Type'],
+                    http_response.status,
                     indent(format_iter(accepted_content_types))))
 
-        return HttpResponse(response.status_code, HttpBody(response.get_data(as_text=True), response.headers['Content-Type']), dict(response.headers))
+        return http_response
 
     @contract
     def assertResponseStatus(self, status: int, response: HttpResponse):
@@ -104,7 +105,8 @@ class HttpTestCase(AppTestCase):
             self.assertEquals(response.status, status)
 
     @contract
-    def assertResponseContentType(self, content_type: str, response: HttpResponse):
+    def assertResponseContentType(self, content_type: str,
+                                  response: HttpResponse):
         self.assertHeader('Content-Type', content_type, response)
 
     @contract

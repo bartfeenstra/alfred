@@ -99,13 +99,27 @@ class Powerable:
         self._powered = False
 
     @property
-    def powered(self) -> Optional[bool]:
+    def powered(self) -> bool:
         return self._powered
 
     @powered.setter
     @contract
     def powered(self, powered: bool):
         self._powered = powered
+
+
+class Illuminative:
+    def __init__(self):
+        self._luminosity = 0.01
+
+    @property
+    @contract
+    def luminosity(self) -> float:
+        return self._luminosity
+
+    @luminosity.setter
+    def luminosity(self, luminosity: float):
+        self._luminosity = luminosity
 
 
 class Rgb24Color:
