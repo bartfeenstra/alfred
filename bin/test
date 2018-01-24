@@ -1,7 +1,26 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
-(
-    cd `dirname "$0"`/.. &&
-    flake8 ./alfred
-    flake8 ./alfred_graphql
-)
+cd `dirname "$0"`/..
+
+# Aggregate test exit codes.
+exit_code=0
+trap '(( exit_code |= $? ))' ERR
+
+flake8 --ignore=E501 ./alfred
+flake8 --ignore=E501 ./alfred_http
+flake8 --ignore=E501 ./alfred_maison
+flake8 --ignore=E501 ./alfred_openapi
+flake8 --ignore=E501 ./alfred_rest
+coverage run -m nose2
+coverage report -m
+
+# Stop aggregating test exit codes.
+trap - ERR
+
+if [ $exit_code -eq 0 ]
+then
+    echo "SUCCESS: ALL TESTS PASSED."
+else
+    echo "ERROR: SOME TESTS FAILED."
+fi
+exit $exit_code

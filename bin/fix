@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+
+cd `dirname "$0"`/..
+autopep8 --in-place -r ./alfred
+autopep8 --in-place -r ./alfred_http
+autopep8 --in-place -r ./alfred_maison
+autopep8 --in-place -r ./alfred_openapi
+autopep8 --in-place -r ./alfred_rest
