@@ -16,17 +16,25 @@ class DeviceType(ResourceType):
         ResourceType.__init__(self, data_type_name)
 
     def get_json_schema(self):
-        schema = super().get_json_schema()
+        schema = ResourceType.get_json_schema(self)
         schema['properties']['type'] = {
             'type': 'string',
         }
         schema['required'].append('type')
+        schema['properties']['label'] = {
+            'type': 'string',
+            'title': 'The human-readable resource label.',
+        }
+        schema['required'].append('label')
         return schema
 
     def update_from_json(self, json_data, instance):
         assert isinstance(instance, Device)
         if instance.id != json_data['id']:
             raise BadRequestError()
+        if instance.type != json_data['type']:
+            raise BadRequestError()
+        instance.label = json_data['label']
 
     def to_json(self, data):
         assert isinstance(data, Device)
@@ -34,9 +42,10 @@ class DeviceType(ResourceType):
             return {
                 'id': data.id,
                 'type': data.type,
+                'label': data.label,
             }
         except AttributeError:
-            raise ValueError('Resources must have an "id" property.')
+            raise ValueError('Resources must have "id" and "type" properties.')
 
 
 class PowerableType(UpdateInputDataType, OutputDataType):
@@ -71,7 +80,7 @@ class IlluminativeType(UpdateInputDataType, OutputDataType):
             'properties': {
                 'luminosity': {
                     'title': 'The luminosity as a float percentage.',
-                    'type': 'float',
+                    'type': 'number',
                 },
             },
             'required': ['luminosity'],
