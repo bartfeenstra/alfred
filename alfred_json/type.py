@@ -97,6 +97,7 @@ class OneOfComplexType(InputDataType, UpdateInputDataType, OutputDataType):
         self._concrete_type_name_extractor = concrete_type_name_extractor
         self._concrete_types = {}
 
+    @contract
     def add_concrete_type(self, concrete_type: IdentifiableDataType):
         if self._shared_type:
             assert isinstance(concrete_type, self._shared_type.__class__)
@@ -108,8 +109,8 @@ class OneOfComplexType(InputDataType, UpdateInputDataType, OutputDataType):
             'allOf': [
                 self._shared_type.get_json_schema(),
                 {
-                    'oneOf': map(lambda x: x.get_json_schema(),
-                                 self._concrete_types)
+                    'oneOf': list(map(lambda x: x.get_json_schema(),
+                                 self._concrete_types.values()))
                 },
             ]
 

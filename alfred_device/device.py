@@ -7,9 +7,10 @@ from alfred import format_iter
 
 class Device(with_metaclass(ContractsMeta)):
     @contract
-    def __init__(self, device_id: str, device_type: str):
+    def __init__(self, device_id: str, device_type: str, label=None):
         self._id = device_id
         self._type = device_type
+        self._label = label
 
     @property
     def id(self) -> str:
@@ -18,6 +19,19 @@ class Device(with_metaclass(ContractsMeta)):
     @property
     def type(self) -> str:
         return self._type
+
+    @property
+    def label(self) -> str:
+        return self._label if self._label is not None else self.id
+
+    @label.setter
+    @contract
+    def label(self, label: str):
+        self._label = label
+
+    @label.deleter
+    def label(self):
+        self._label = None
 
 
 class DeviceNotFound(RuntimeError):

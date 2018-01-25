@@ -4,6 +4,7 @@ from typing import Dict, List, Tuple
 
 from contracts import contract, ContractsMeta, with_metaclass
 
+from alfred_device.resource import DeviceType
 from alfred_json.type import IdentifiableDataType, DataType
 
 
@@ -33,6 +34,12 @@ class IdentifiableDataTypeAggregator(Rewriter):
                 # Rewrite the type itself, because it may contain further
                 # types.
                 schema, definitions = self._rewrite(data_type.get_json_schema(), definitions)
+                if 'device' == data_type:
+                    print('NEMAN')
+                    print('NEMAN')
+                    print('NEMAN')
+                    print(data_type)
+                    print(schema)
                 definitions['data'][data_type.name] = schema
             return {
                        '$ref': '#/definitions/%s/%s' % ('data', data_type.name),

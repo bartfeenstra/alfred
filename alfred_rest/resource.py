@@ -61,6 +61,9 @@ class AnyResourceType(ResourceType, InputDataType, UpdateInputDataType):
     def add_concrete_type(self, data_type: ResourceType):
         self._subtype.add_concrete_type(data_type)
 
+    def get_json_schema(self):
+        return self._subtype.get_json_schema()
+
     def from_json(self, json_data):
         return self._subtype.from_json(json_data)
 

@@ -18,10 +18,11 @@ class OlaType(DeviceType, PowerableType, Rgb24ColorableType, IlluminativeType,
         InputDataType.__init__(self)
 
     def get_json_schema(self):
-        return DeviceType.get_json_schema(
-            self) + PowerableType.get_json_schema(
-            self) + Rgb24ColorableType.get_json_schema(
-            self) + IlluminativeType.get_json_schema(self)
+        schema = DeviceType.get_json_schema(self)
+        schema.update(PowerableType.get_json_schema(self))
+        schema.update(Rgb24ColorableType.get_json_schema(self))
+        schema.update(IlluminativeType.get_json_schema(self))
+        return schema
 
     def update_from_json(self, json_data, instance):
         assert isinstance(instance, Ola)
