@@ -15,7 +15,8 @@ class DmxPanel:
     @contract
     def set(self, channel: int, value: int):
         if channel >= len(self._channels):
-            raise RuntimeError('Channel %d does not exist on this DMX panel (0-%d).' % (channel, len(self._channels)))
+            raise RuntimeError(
+                'Channel %d does not exist on this DMX panel (0-%d).' % (channel, len(self._channels)))
         assert 0 <= value <= 255
         self._channels[channel] = value
         self._send(channel)

@@ -35,6 +35,7 @@ class DeviceType(ResourceType):
         if instance.type != json_data['type']:
             raise BadRequestError()
         instance.label = json_data['label']
+        return instance
 
     def to_json(self, data):
         assert isinstance(data, Device)
@@ -64,6 +65,7 @@ class PowerableType(UpdateInputDataType, OutputDataType):
     def update_from_json(self, json_data, instance):
         assert isinstance(instance, Powerable)
         instance.powered = json_data['powered']
+        return instance
 
     def to_json(self, data):
         if isinstance(data, Powerable):
@@ -89,6 +91,7 @@ class IlluminativeType(UpdateInputDataType, OutputDataType):
     def update_from_json(self, json_data, instance):
         assert isinstance(instance, Illuminative)
         instance.luminosity = float(json_data['luminosity'])
+        return instance
 
     def to_json(self, data):
         assert isinstance(data, Illuminative)
@@ -160,6 +163,7 @@ class Rgb24ColorableType(UpdateInputDataType, OutputDataType):
     def update_from_json(self, json_data, instance):
         assert isinstance(instance, Rgb24Colorable)
         instance.color = self._color_type.from_json(json_data['color'])
+        return instance
 
     def to_json(self, data):
         assert isinstance(data, Rgb24Colorable)

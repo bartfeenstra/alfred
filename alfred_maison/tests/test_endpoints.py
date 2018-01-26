@@ -21,7 +21,7 @@ class AlterStageLightEndpointTest(MaisonTestCase):
         resource_id = 'stage_1'
         powered = True
         color = '#123456'
-        luminosity = 73
+        luminosity = 0.73
         body = json.dumps([
             {
                 'op': 'replace',

@@ -26,6 +26,12 @@ class InputDataType(DataType):
 class UpdateInputDataType(DataType):
     @abc.abstractmethod
     def update_from_json(self, json_data, instance):
+        """
+        Returns the instance, updated with data from json_data.
+        :param json_data:
+        :param instance:
+        :return:
+        """
         pass
 
 
@@ -117,17 +123,24 @@ class OneOfComplexType(InputDataType, UpdateInputDataType, OutputDataType):
         }
 
     def from_json(self, json_data):
-        return self._concrete_types[
-            json_data[self._concrete_type_name_key]].from_json(json_data)
+        concrete_type_name = json_data[self._concrete_type_name_key]
+        concrete_type = self._concrete_types[concrete_type_name]
+        if not isinstance(concrete_type, InputDataType):
+            raise RuntimeError('%s must extend %s.' % (concrete_type.__class__, InputDataType))
+        return concrete_type.from_json(json_data)
 
     def update_from_json(self, json_data, instance):
-        return self._concrete_types[
-            json_data[self._concrete_type_name_key]].update_from_json(
-            json_data, instance)
+        concrete_type_name = json_data[self._concrete_type_name_key]
+        concrete_type = self._concrete_types[concrete_type_name]
+        if not isinstance(concrete_type, UpdateInputDataType):
+            raise RuntimeError('%s must extend %s.' % (concrete_type.__class__, UpdateInputDataType))
+        return concrete_type.update_from_json(json_data, instance)
 
     def to_json(self, data):
         concrete_type_name = self._concrete_type_name_extractor(data)
         concrete_type = self._concrete_types[concrete_type_name]
+        if not isinstance(concrete_type, OutputDataType):
+            raise RuntimeError('%s must extend %s.' % (concrete_type.__class__, OutputDataType))
         return concrete_type.to_json(data)
 
 

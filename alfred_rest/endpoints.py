@@ -13,7 +13,7 @@ from alfred_http.endpoints import Endpoint, EndpointRepository, \
     NonConfigurableRequest, RequestType, Request, NotFoundError, \
     ResponseType, PayloadType, RequestPayloadType, ResponsePayloadType, \
     RequestParameter, ErrorResponseType, EmptyResponseType, BadRequestError, \
-    PayloadedMessage
+    PayloadedMessage, Error
 from alfred_http.http import HttpRequest, HttpBody
 from alfred_json import RESOURCE_PATH
 from alfred_json.schema import SchemaNotFound
@@ -94,10 +94,14 @@ class ErrorType(IdentifiableDataType, OutputDataType):
         }
 
     def to_json(self, data):
-        return {
+        assert isinstance(data, Error)
+        json_data = {
             'code': data.code,
             'title': data.title,
         }
+        if data.description:
+            json_data['description'] = data.description
+        return json_data
 
 
 class ErrorPayloadType(JsonResponsePayloadType):
@@ -288,6 +292,9 @@ class ResourcesResponse(SuccessResponse, PayloadedMessage):
 
 def build_resources_response_type_class(
         resource_type: Union[OutputDataType, IdentifiableDataType]):
+    assert isinstance(resource_type, OutputDataType)
+    assert isinstance(resource_type, IdentifiableDataType)
+
     class ResourcesResponseType(ResponseType):
         _resource_type = resource_type
         _type = ListType(resource_type)
@@ -349,6 +356,9 @@ class ResourceRequestType(RequestType):
 
 def build_resource_response_type_class(
         resource_type: Union[OutputDataType, IdentifiableDataType]):
+    assert isinstance(resource_type, OutputDataType)
+    assert isinstance(resource_type, IdentifiableDataType)
+
     class ResourceResponseType(ResponseType):
         _resource_type = resource_type
 
@@ -379,6 +389,9 @@ class GetResourceEndpoint(Endpoint):
 
 def build_add_resource_request_type_class(
         resource_type: Union[InputDataType, IdentifiableDataType]):
+    assert isinstance(resource_type, InputDataType)
+    assert isinstance(resource_type, IdentifiableDataType)
+
     class AddResourceRequestType(RequestType):
         _type = resource_type
 
@@ -423,6 +436,9 @@ class AddResourceEndpoint(Endpoint):
 
 def build_replace_resource_request_type_class(
         resource_type: Union[InputDataType, IdentifiableDataType]):
+    assert isinstance(resource_type, InputDataType)
+    assert isinstance(resource_type, IdentifiableDataType)
+
     class ReplaceResourceRequestType(RequestType):
         _resource_type = resource_type
 
@@ -444,6 +460,7 @@ def build_replace_resource_request_type_class(
 class ReplaceResourceRequest(Request, PayloadedMessage):
     @contract
     def __init__(self, resource_id: str, resource):
+        assert resource is not None
         self._resource_id = resource_id
         self._resource = resource
 
@@ -564,7 +581,7 @@ class AlterResourceEndpoint(Endpoint):
             raise NotFoundError()
         resource_data = resource_type.to_json(resource)
         resource_data = patch.apply(resource_data)
-        resource_type.update_from_json(resource_data, resource)
+        resource = resource_type.update_from_json(resource_data, resource)
         # @todo How to handle validation?
         try:
             updated_resource = self._resources.update_resource(resource)
