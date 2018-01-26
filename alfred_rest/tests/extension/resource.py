@@ -96,6 +96,7 @@ class UpdateRestTestResourceType(IdentifiableDataType, InputDataType, UpdateInpu
     def update_from_json(self, json_data, instance):
         assert (instance.id == json_data['id'])
         instance.label = json_data['label']
+        return instance
 
     def to_json(self, data):
         return {

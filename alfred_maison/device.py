@@ -9,7 +9,7 @@ from alfred_json.type import InputDataType, UpdateInputDataType
 
 
 class OlaType(DeviceType, PowerableType, Rgb24ColorableType, IlluminativeType,
-              UpdateInputDataType):
+              InputDataType, UpdateInputDataType):
     def __init__(self):
         DeviceType.__init__(self, 'ola')
         PowerableType.__init__(self)
@@ -24,12 +24,23 @@ class OlaType(DeviceType, PowerableType, Rgb24ColorableType, IlluminativeType,
         schema.update(IlluminativeType.get_json_schema(self))
         return schema
 
+    def from_json(self, json_data):
+        # We cannot really replace the entire resource, because it depends on
+        #  internal, real-world factors, such as the DMX panel configuration.
+        #  Therefore we load the original resource and simply apply updates.
+        device_id = json_data['id']
+        ola = App.current.service('device', 'devices').get_device(device_id)
+        assert isinstance(ola, Ola)
+        return self.update_from_json(json_data, ola)
+
     def update_from_json(self, json_data, instance):
         assert isinstance(instance, Ola)
-        DeviceType.update_from_json(self, json_data, instance)
-        PowerableType.update_from_json(self, json_data, instance)
-        Rgb24ColorableType.update_from_json(self, json_data, instance)
-        IlluminativeType.update_from_json(self, json_data, instance)
+        instance = DeviceType.update_from_json(self, json_data, instance)
+        instance = PowerableType.update_from_json(self, json_data, instance)
+        instance = Rgb24ColorableType.update_from_json(
+            self, json_data, instance)
+        instance = IlluminativeType.update_from_json(self, json_data, instance)
+        return instance
 
     def to_json(self, data):
         json_data = {}
@@ -41,33 +52,38 @@ class OlaType(DeviceType, PowerableType, Rgb24ColorableType, IlluminativeType,
 
 
 class Ola(Device, Powerable, Rgb24Colorable, Illuminative):
-    def __init__(self, device_id, red_channel: int, green_slot: int,
-                 blue_slot: int, luminosity_slot: int):
+    def __init__(self, device_id, red_channel: int, green_channel: int,
+                 blue_channel: int, luminosity_channel: int):
         Device.__init__(self, device_id, 'ola')
         Powerable.__init__(self)
         Rgb24Colorable.__init__(self)
         Illuminative.__init__(self)
         self._dmx = App.current.service('maison', 'dmx_panel')
         self._red_channel = red_channel
-        self._green_channel = green_slot
-        self._blue_channel = blue_slot
-        self._luminosity_slot = luminosity_slot
+        self._green_channel = green_channel
+        self._blue_channel = blue_channel
+        self._luminosity_channel = luminosity_channel
 
     @property
     def powered(self):
-        return self.luminosity != 0.0
+        return self._powered
 
     @powered.setter
     def powered(self, powered):
-        self.luminosity = 1.0 if powered else 0.0
+        self._powered = powered
+        self.luminosity = self._luminosity
 
     @property
     def luminosity(self):
-        return self._dmx.get(self._luminosity_slot) / 255 * 100
+        return self._luminosity
 
     @luminosity.setter
     def luminosity(self, luminosity):
-        self._dmx.set(self._luminosity_slot, round(luminosity / 100 * 255))
+        assert 0 <= luminosity <= 1.0
+        self._luminosity = luminosity
+        if not self.powered:
+            luminosity = 0
+        self._dmx.set(self._luminosity_channel, round(luminosity * 255))
 
     @property
     def color(self):

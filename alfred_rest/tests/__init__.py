@@ -46,7 +46,8 @@ class RestTestCase(HttpTestCase):
                     schema_url, response_type.name)
                 response_schema = self._get_schema(response_schema_url)
                 json_validator = self._app.service('json', 'validator')
-                json_validator.validate(json.loads(response.body.content), response_schema)
+                json_validator.validate(json.loads(
+                    response.body.content), response_schema)
                 requirements = []
                 break
             except Exception:

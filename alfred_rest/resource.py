@@ -42,6 +42,7 @@ class ResourceType(IdentifiableDataType, UpdateInputDataType, OutputDataType):
     def update_from_json(self, json_data, instance):
         if instance.id != json_data['id']:
             raise BadRequestError()
+        return instance
 
     def to_json(self, data):
         try:
@@ -56,7 +57,8 @@ class AnyResourceType(ResourceType, InputDataType, UpdateInputDataType):
     @contract
     def __init__(self, resource_type: ResourceType, concrete_name_key: str, concrete_type_name_extractor: Callable):
         ResourceType.__init__(self, resource_type.name)
-        self._subtype = OneOfComplexType(resource_type, concrete_name_key, concrete_type_name_extractor)
+        self._subtype = OneOfComplexType(
+            resource_type, concrete_name_key, concrete_type_name_extractor)
 
     def add_concrete_type(self, data_type: ResourceType):
         self._subtype.add_concrete_type(data_type)
@@ -68,7 +70,7 @@ class AnyResourceType(ResourceType, InputDataType, UpdateInputDataType):
         return self._subtype.from_json(json_data)
 
     def update_from_json(self, json_data, instance):
-        self._subtype.update_from_json(json_data, instance)
+        return self._subtype.update_from_json(json_data, instance)
 
     def to_json(self, data):
         return self._subtype.to_json(data)
@@ -154,7 +156,7 @@ class UpdateableResourceRepository(ResourceRepository):
     automatically.
     """
 
-    def get_update_type(self) -> Union[ResourceType, UpdateInputDataType]:
+    def get_update_type(self) -> Union[ResourceType, InputDataType, UpdateInputDataType]:
         """
         If the returned type also extends OutputDataType, HTTP PATCH endpoints
         will be available automatically.

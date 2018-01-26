@@ -92,7 +92,7 @@ class NestedDeviceRepository(DeviceRepository):
             self._aggregate_devices()
 
         for device in self._devices:
-            if device_id == device.name:
+            if device_id == device.id:
                 return device
         raise DeviceNotFound(device_id, self._devices)
 
@@ -124,7 +124,7 @@ class Powerable:
 
 class Illuminative:
     def __init__(self):
-        self._luminosity = 0.01
+        self._luminosity = 0.0
 
     @property
     @contract
