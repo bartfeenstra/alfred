@@ -31,6 +31,7 @@ class HttpTestCase(AppTestCase):
     def setUp(self):
         super().setUp()
         flask_app = self._app.service('http', 'flask')
+        flask_app.config.update(SERVER_NAME='alfred.local')
         self._flask_app = flask_app.test_client()
         self._flask_app_context = flask_app.app_context()
         self._flask_app_context.push()

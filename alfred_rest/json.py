@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Callable
 from urllib.parse import urlunsplit, urlsplit
 
 from contracts import contract
@@ -17,7 +17,7 @@ class ExternalReferenceProxy(Rewriter):
     _REWRITE_KEYS = ('id', '$ref', '$schema')
 
     @contract
-    def __init__(self, base_url: str, urls: EndpointUrlBuilder):
+    def __init__(self, base_url: Callable, urls: EndpointUrlBuilder):
         self._base_url = base_url
         self._urls = urls
 
@@ -32,7 +32,7 @@ class ExternalReferenceProxy(Rewriter):
             return pointer
 
         # Skip pointers that have been rewritten already.
-        if pointer.startswith(self._base_url):
+        if pointer.startswith(self._base_url()):
             return pointer
 
         original_parts = urlsplit(pointer)
