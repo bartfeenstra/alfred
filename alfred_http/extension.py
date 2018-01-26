@@ -25,8 +25,10 @@ class HttpExtension(Extension):
 
     @Extension.service()
     def base_url(self):
-        # @todo Make this configurable.
-        return 'http://127.0.0.1:5000'
+        def _base_url():
+            flask_app = App.current.service('http', 'flask')
+            return '%s://%s' % (flask_app.config['PREFERRED_URL_SCHEME'], flask_app.config['SERVER_NAME'])
+        return _base_url
 
     @Extension.service()
     def flask(self):

@@ -19,7 +19,7 @@ class JsonSchemaEndpointTest(RestTestCase):
         actual_schema = json.loads(response.body.content)
         validate(actual_schema, json_schema())
         expected_response_schema = {
-            '$ref': 'http://127.0.0.1:5000/about/json/external-schema/aHR0cDovL2pzb24tc2NoZW1hLm9yZy9kcmFmdC0wNC9zY2hlbWE%3D'
+            '$ref': 'http://alfred.local/about/json/external-schema/aHR0cDovL2pzb24tc2NoZW1hLm9yZy9kcmFmdC0wNC9zY2hlbWE%3D'
         }
         self.assertIn('definitions', actual_schema)
         self.assertIn('response', actual_schema['definitions'])

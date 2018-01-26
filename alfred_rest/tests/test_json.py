@@ -3,8 +3,8 @@ from alfred_rest.tests import RestTestCase
 
 class ExternalReferenceProxyTest(RestTestCase):
     ORIGINAL_EXTERNAL_POINTER = 'http://json-schema.org/draft-04/schema#'
-    REWRITTEN_EXTERNAL_POINTER = 'http://127.0.0.1:5000/about/json/external-schema/aHR0cDovL2pzb24tc2NoZW1hLm9yZy9kcmFmdC0wNC9zY2hlbWE%3D'
-    ALFRED_POINTER = 'http://127.0.0.1:5000/about/json/schema#definitions/data/Foo'
+    REWRITTEN_EXTERNAL_POINTER = 'http://alfred.local/about/json/external-schema/aHR0cDovL2pzb24tc2NoZW1hLm9yZy9kcmFmdC0wNC9zY2hlbWE%3D'
+    ALFRED_POINTER = 'http://alfred.local/about/json/schema#definitions/data/Foo'
     INTERNAL_POINTER = '#/definitions/data/Bar'
 
     def testRewritePointerWithNonStringShouldPassThrough(self):

@@ -1,5 +1,4 @@
 from typing import List, Dict, Iterable
-from urllib.parse import urlparse
 
 from contracts import contract
 from flask import Flask, request as current_http_request, \
@@ -104,10 +103,6 @@ class FlaskApp(Flask):
         super().__init__('alfred')
         self._app = app
         self._register_routes()
-        base_url = app.service('http', 'base_url')
-        parsed_base_url = urlparse(base_url)
-        self.config.update(PREFERRED_URL_SCHEME=parsed_base_url.scheme)
-        self.config.update(SERVER_NAME=parsed_base_url.netloc)
         self.response_class = EmptyFlaskHttpResponse
 
     def _register_routes(self):
