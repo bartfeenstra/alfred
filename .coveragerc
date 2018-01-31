@@ -1,6 +1,7 @@
 [run]
 source =
     alfred
+    alfred_device
     alfred_http
     alfred_json
     alfred_maison
