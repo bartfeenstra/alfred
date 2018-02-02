@@ -53,8 +53,8 @@ class OlaType(DeviceType, PowerableType, Rgb24ColorableType, IlluminativeType,
 
 class Ola(Device, Powerable, Rgb24Colorable, Illuminative):
     def __init__(self, device_id, red_channel: int, green_channel: int,
-                 blue_channel: int, luminosity_channel: int):
-        Device.__init__(self, device_id, 'ola')
+                 blue_channel: int, luminosity_channel: int, label=None):
+        Device.__init__(self, device_id, 'ola', label)
         Powerable.__init__(self)
         Rgb24Colorable.__init__(self)
         Illuminative.__init__(self)
