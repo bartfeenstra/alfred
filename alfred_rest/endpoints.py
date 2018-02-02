@@ -496,13 +496,36 @@ class ReplaceResourceEndpoint(Endpoint):
         return ResourceResponse(list(resources)[0])
 
 
+class JsonPatchPathType(IdentifiableDataType):
+    def __init__(self):
+        super().__init__('json-patch-path')
+
+    def get_json_schema(self):
+        with open(RESOURCE_PATH + '/schemas/json-patch.json') as f:
+            return json.load(f)['definitions']['path']
+
+
+class JsonPatchOperationType(IdentifiableDataType):
+    def __init__(self):
+        super().__init__('json-patch-operation')
+
+    def get_json_schema(self):
+        with open(RESOURCE_PATH + '/schemas/json-patch.json') as f:
+            schema = json.load(f)['definitions']['operation']
+            schema['allOf'] = [JsonPatchPathType()]
+            return schema
+
+
 class JsonPatchType(InputDataType, OutputDataType, IdentifiableDataType):
     def __init__(self):
         super().__init__('json-patch')
 
     def get_json_schema(self):
         with open(RESOURCE_PATH + '/schemas/json-patch.json') as f:
-            return json.load(f)
+            schema = json.load(f)
+            del schema['definitions']
+            schema['items'] = JsonPatchOperationType()
+            return schema
 
     def from_json(self, json_data):
         return JsonPatch(json_data)
