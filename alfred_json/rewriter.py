@@ -56,7 +56,7 @@ class IdentifiableDataTypeAggregator(Rewriter):
         return schema
 
     @contract
-    def _rewrite(self, data, definitions: Dict) -> Tuple:
+    def _rewrite(self, data, definitions: Dict):
         data = copy(data)
         definitions = copy(definitions)
         if isinstance(data, DataType):
