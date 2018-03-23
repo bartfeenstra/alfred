@@ -20,7 +20,6 @@ MarkupSafe==1.0
 mccabe==0.6.1
 nose2==0.6.5
 parameterized==0.6.1
-pkg-resources==0.0.0
 pycodestyle==2.3.1
 PyContracts==1.8.3
 pyflakes==1.5.0
