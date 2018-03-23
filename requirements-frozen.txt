@@ -9,7 +9,7 @@ jsonpatch==1.21
 jsonpointer==2.0
 jsonschema==2.6.0
 MarkupSafe==1.0
-PyContracts==1.8.2
+PyContracts==1.8.3
 pyparsing==2.2.0
 PyYAML==3.12
 six==1.11.0
