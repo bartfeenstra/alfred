@@ -1,4 +1,5 @@
 from contracts import contract
+from py_irsend.irsend import send_once
 
 from alfred.app import App
 from alfred_device.device import Rgb24Colorable, Powerable, Device, \
@@ -99,3 +100,53 @@ class Ola(Device, Powerable, Rgb24Colorable, Illuminative):
             self._green_channel: color.green,
             self._blue_channel: color.blue,
         })
+
+
+class TvType(DeviceType, PowerableType, InputDataType, UpdateInputDataType):
+    def __init__(self):
+        DeviceType.__init__(self, 'tv')
+        PowerableType.__init__(self)
+        InputDataType.__init__(self)
+
+    def get_json_schema(self):
+        schema = DeviceType.get_json_schema(self)
+        schema.update(PowerableType.get_json_schema(self))
+        return schema
+
+    def from_json(self, json_data):
+        # We cannot really replace the entire resource, because it depends on
+        #  internal, real-world factors. Therefore we load the original
+        #  resource and simply apply updates.
+        device_id = json_data['id']
+        ola = App.current.service('device', 'devices').get_device(device_id)
+        assert isinstance(ola, Ola)
+        return self.update_from_json(json_data, ola)
+
+    def update_from_json(self, json_data, instance):
+        assert isinstance(instance, Ola)
+        instance = DeviceType.update_from_json(self, json_data, instance)
+        instance = PowerableType.update_from_json(self, json_data, instance)
+        return instance
+
+    def to_json(self, data):
+        json_data = {}
+        json_data.update(DeviceType.to_json(self, data))
+        json_data.update(PowerableType.to_json(self, data))
+        return json_data
+
+
+class Tv(Powerable, Device):
+    def __init__(self, remote, label=None):
+        Device.__init__(self, 'tv', 'tv', label)
+        Powerable.__init__(self)
+        self._remote = remote
+
+    @property
+    def powered(self):
+        return self._powered
+
+    @powered.setter
+    def powered(self, powered):
+        self._powered = powered
+        # @todo Find the discrete "power off" key.
+        send_once(self._remote, 'KEY_POWER')

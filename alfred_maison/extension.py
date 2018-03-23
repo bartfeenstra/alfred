@@ -2,7 +2,7 @@ from alfred.app import Extension, App
 from alfred_device.device import StaticDeviceRepository
 from alfred_device.extension import DeviceExtension
 from alfred_device.resource import DeviceResourceRepository
-from alfred_maison.device import Ola, OlaType
+from alfred_maison.device import Ola, OlaType, TvType, Tv
 from alfred_maison.ola import DmxPanel
 from alfred_openapi.extension import OpenApiExtension
 from alfred_rest.extension import RestExtension
@@ -29,6 +29,16 @@ class MaisonExtension(Extension):
     @Extension.service(tags=('device_resources',))
     def _ola_device_resources(self):
         return DeviceResourceRepository(OlaType(), App.current.service('maison', 'ola_devices'))
+
+    @Extension.service(tags=('devices',))
+    def _tv_devices(self):
+        devices = StaticDeviceRepository()
+        devices.add_device(Tv('samsung_le37c550', label='TV'))
+        return devices
+
+    @Extension.service(tags=('device_resources',))
+    def _tv_device_resources(self):
+        return DeviceResourceRepository(TvType(), App.current.service('maison', 'tv_devices'))
 
     @Extension.service()
     def _dmx_panel(self):
