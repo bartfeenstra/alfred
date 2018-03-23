@@ -14,33 +14,41 @@ class DmxPanel:
 
     @contract
     def set(self, channel: int, value: int):
-        if channel >= len(self._channels):
-            raise RuntimeError(
-                'Channel %d does not exist on this DMX panel (0-%d).' % (channel, len(self._channels)))
-        assert 0 <= value <= 255
-        self._channels[channel] = value
-        self._send(channel)
+        self.set_multiple({
+            channel: value,
+        })
 
     @contract
     def set_multiple(self, values: Dict):
         for channel, value in values.items():
-            self._channels[channel] = value
-        self._send(max(values))
+            self._assert_channel(channel)
+            self._assert_value(value)
+            self._channels[channel - 1] = value
+        self._send()
 
     @contract
     def get(self, channel: int) -> int:
-        return self._channels[channel]
+        self._assert_channel(channel)
+        return self._channels[channel - 1]
 
     @contract
     def get_multiple(self, channels: Iterable) -> Iterable:
         values = {}
         for channel in channels:
-            values[channel] = self._channels[channel]
+            self._assert_channel(channel)
+            values[channel - 1] = self.get(channel)
         return values
 
     @contract
-    def _send(self, last_channel: int):
-        send_values = self._channels[0:last_channel + 1]
-        ola_dmx_values = ','.join(map(str, send_values))
+    def _assert_channel(self, channel: int):
+        if channel < 1 or channel > len(self._channels):
+            raise ValueError('Channel %d does not exist on this DMX panel (0-%d).' % (channel, len(self._channels) - 1))
+
+    @contract
+    def _assert_value(self, value: int):
+        if value < 0 or value > 255:
+            raise ValueError('Values must be 0-255, but %d was given.' % value)
+
+    def _send(self):
         subprocess.call(
-            ['ola_set_dmx', '-u', str(self._universe), '-d', ola_dmx_values])
+            ['ola_set_dmx', '-u', str(self._universe), '-d', ','.join(map(str, self._channels))])

@@ -20,10 +20,10 @@ class MaisonExtension(Extension):
     @Extension.service(tags=('devices',))
     def _ola_devices(self):
         devices = StaticDeviceRepository()
-        devices.add_device(Ola('stage_1', 0, 1, 2, 3, label='TV'))
-        devices.add_device(Ola('stage_2', 4, 5, 6, 7, label='Window'))
-        devices.add_device(Ola('stage_3', 8, 9, 10, 11, label='Couch'))
-        devices.add_device(Ola('stage_4', 12, 13, 14, 15, label='Kitchen'))
+        devices.add_device(Ola('stage_1', 1, 2, 3, 4, label='TV'))
+        devices.add_device(Ola('stage_2', 5, 6, 7, 8, label='Window'))
+        devices.add_device(Ola('stage_3', 9, 10, 11, 12, label='Couch'))
+        devices.add_device(Ola('stage_4', 13, 14, 15, 16, label='Kitchen'))
         return devices
 
     @Extension.service(tags=('device_resources',))
@@ -32,4 +32,4 @@ class MaisonExtension(Extension):
 
     @Extension.service()
     def _dmx_panel(self):
-        return DmxPanel()
+        return DmxPanel(1, 16)

@@ -50,10 +50,8 @@ class AlterStageLightEndpointTest(MaisonTestCase):
         self.assertEqual(data['id'], resource_id)
         self.assertEqual(data['powered'], powered)
         self.assertEqual(data['color'], color)
-        mock_call.assert_any_call(['ola_set_dmx', '-u', '1', '-d', '18,52,86'])
         self.assertAlmostEqual(data['luminosity'], luminosity, places=0)
-        mock_call.assert_any_call(
-            ['ola_set_dmx', '-u', '1', '-d', '18,52,86,186'])
+        mock_call.assert_called_with(['ola_set_dmx', '-u', '1', '-d', '18,52,86,186,0,0,0,0,0,0,0,0,0,0,0,0'])
 
         # Confirm we can retrieve the resource we just altered.
         response = self.request('device', parameters={
