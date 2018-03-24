@@ -29,7 +29,7 @@ class OpenApi:
         }
         # @todo How to determine the API version?
         spec = APISpec('Alfred', '0.0.0', info=info, responses=responses,
-                       host=request.host, schemes=[request.scheme])
+                       host=request.root_url, schemes=[request.scheme])
 
         paths_operations = {}
         for endpoint in self._endpoints.get_endpoints():
