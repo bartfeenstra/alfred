@@ -1,3 +1,5 @@
+from urllib.parse import urlparse
+
 from apispec import APISpec
 from contracts import contract
 from flask import request
@@ -28,8 +30,10 @@ class OpenApi:
             'description': 'This document describes Alfred\'s HTTP API in the [OpenApi 2.0](https://github.com/OAI/OpenAPI-Specification/blob/master/versions/2.0.md) format.',
         }
         # @todo How to determine the API version?
+        url_parts = urlparse(request.url_root)
+        api_host = url_parts.netloc + url_parts.path.rstrip('/')
         spec = APISpec('Alfred', '0.0.0', info=info, responses=responses,
-                       host=request.url_root, schemes=[request.scheme])
+                       host=api_host, schemes=[request.scheme])
 
         paths_operations = {}
         for endpoint in self._endpoints.get_endpoints():
