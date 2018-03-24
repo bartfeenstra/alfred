@@ -3,7 +3,7 @@ from flask_cors import CORS
 from alfred.app import Extension, App
 from alfred_http.endpoints import NestedEndpointRepository, EndpointUrlBuilder, \
     EmptyPayloadType
-from alfred_http.flask.app import FlaskApp
+from alfred_http.flask.app import FlaskApp, ReverseProxied
 from alfred_json.extension import JsonExtension
 
 
@@ -34,6 +34,7 @@ class HttpExtension(Extension):
     def flask(self):
         flask = FlaskApp(App.current)
         CORS(flask)
+        flask.wsgi_app = ReverseProxied(flask.wsgi_app)
         return flask
 
     @Extension.service()
