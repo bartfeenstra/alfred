@@ -1,4 +1,4 @@
-"""Integrates Backuppy with Python's setuptools."""
+"""Integrates Alfred with Python's setuptools."""
 
 import os
 
