@@ -1,4 +1,5 @@
 *.pyc
 /.coverage
+/alfred.egg-info
 /db.sqlite3
 /venv
