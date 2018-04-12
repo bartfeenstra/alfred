@@ -1,7 +1,0 @@
-alfred
-alfred_device
-alfred_http
-alfred_json
-alfred_maison
-alfred_openapi
-alfred_rest
